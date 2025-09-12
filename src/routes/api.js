@@ -1,0 +1,47 @@
+//routes/api.js
+const express = require('express');
+const router = express.Router();
+const { saludo } = require('../controllers/exampleController');
+
+const authRoutes = require('./auth');
+const adminAuthRoutes = require('./adminAuth');
+const adminDashboardRoutes = require('./adminDashboard');
+const adminUsuariosRoutes = require('./adminUsuarios');
+const adminListasRoutes = require('./adminListas');
+const adminCategoriasRoutes = require('./adminCategorias');
+const adminBlogRoutes = require('./adminBlog');
+const adminComentariosRoutes = require('./adminComentarios');
+const estudianteRoutes = require('./estudiante');
+const empresaRoutes = require('./empresa');
+const ofertaRoutes = require('./oferta');
+const postulacionRoutes = require('./postulacion');
+const preguntaOfertaRoutes = require('./preguntaOferta');
+const categoriaRoutes = require('./categoria');
+const blogPostRoutes = require('./blogPost');
+const comentarioRoutes = require('./comentario');
+const uploadRoutes = require('./upload');
+const chatRoutes = require('./chat');
+const ubicacionRoutes = require('./ubicacion');
+
+router.get('/', saludo);
+router.use('/auth', authRoutes); 
+router.use('/admin/auth', adminAuthRoutes);
+router.use('/admin/dashboard', adminDashboardRoutes);
+router.use('/admin/usuarios', adminUsuariosRoutes);
+router.use('/admin/listas', adminListasRoutes);
+router.use('/admin/categorias', adminCategoriasRoutes);
+router.use('/admin/blog-posts', adminBlogRoutes);
+router.use('/admin/comentarios', adminComentariosRoutes);
+router.use('/estudiantes', estudianteRoutes);
+router.use('/empresas', empresaRoutes);
+router.use('/ofertas', ofertaRoutes);
+router.use('/postulaciones', postulacionRoutes);
+router.use('/preguntas-oferta', preguntaOfertaRoutes);
+router.use('/categorias', categoriaRoutes);
+router.use('/posts', blogPostRoutes);
+router.use('/comentarios', comentarioRoutes);
+router.use('/upload', uploadRoutes);
+router.use('/chat', chatRoutes);
+router.use('/ubicaciones', ubicacionRoutes);
+
+module.exports = router;

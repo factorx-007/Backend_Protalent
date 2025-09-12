@@ -1,0 +1,1819 @@
+openapi: 3.0.3
+info:
+  title: Plataforma Practicas API
+  version: 1.0.0
+  description: |
+    API REST para gestión de blogs, comentarios, multimedia y autenticación.
+    
+    **Interfaz Swagger UI disponible en:** `/api-docs`
+servers:
+  - url: http://localhost:3000/api
+paths:
+  /auth/login:
+    post:
+      summary: Iniciar sesión
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  example: usuario@mail.com
+                password:
+                  type: string
+                  example: "1234"
+      responses:
+        '200':
+          description: Login exitoso
+          content:
+            application/json:
+              example:
+                mensaje: Login exitoso
+                token: "jwt.token.aqui"
+                user:
+                  id: 1
+                  nombre: Usuario Ejemplo
+                  email: usuario@mail.com
+                  rol: usuario
+        '404':
+          description: Usuario no encontrado
+          content:
+            application/json:
+              example:
+                error: Usuario no encontrado
+  /auth/register:
+    post:
+      summary: Registrar usuario
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nombre:
+                  type: string
+                  example: Nuevo Usuario
+                email:
+                  type: string
+                  example: nuevo@mail.com
+                password:
+                  type: string
+                  example: "1234"
+                rol:
+                  type: string
+                  example: usuario
+      responses:
+        '201':
+          description: Usuario registrado
+          content:
+            application/json:
+              example:
+                mensaje: Usuario registrado con éxito
+                user:
+                  id: 2
+                  nombre: Nuevo Usuario
+                  email: nuevo@mail.com
+                  rol: usuario
+        '400':
+          description: Error de validación
+          content:
+            application/json:
+              example:
+                error: Faltan campos requeridos
+  /blog:
+    get:
+      summary: Obtener posts (con ordenamiento y paginación)
+      parameters:
+        - in: query
+          name: order
+          schema:
+            type: string
+            enum: [recientes, interacciones, comentarios, reacciones, compartidos]
+        - in: query
+          name: limit
+          schema:
+            type: integer
+        - in: query
+          name: offset
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Lista de posts
+          content:
+            application/json:
+              example:
+                - id: 1
+                  titulo: Primer post
+                  contenido: "Contenido del post"
+                  autorId: 1
+                  autorTipo: usuario
+                  compartidos: 2
+                  createdAt: "2024-07-08T12:00:00Z"
+                  updatedAt: "2024-07-08T12:00:00Z"
+                  BlogPostMedia:
+                    - id: 1
+                      blogPostId: 1
+                      ruta: "https://cloudinary.com/imagen1.jpg"
+                      tipo: "image/jpeg"
+                      tamano: 12345
+                  BlogPostReaction:
+                    - id: 1
+                      blogPostId: 1
+                      userId: 2
+                      tipo: like
+                  Categoria:
+                    nombre: Noticias
+    post:
+      summary: Crear post
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                titulo:
+                  type: string
+                  example: Nuevo post
+                contenido:
+                  type: string
+                  example: "Contenido del nuevo post"
+                autorId:
+                  type: integer
+                  example: 1
+                autorTipo:
+                  type: string
+                  example: usuario
+      responses:
+        '201':
+          description: Post creado
+          content:
+            application/json:
+              example:
+                mensaje: Post creado
+                post:
+                  id: 2
+                  titulo: Nuevo post
+                  contenido: "Contenido del nuevo post"
+                  autorId: 1
+                  autorTipo: usuario
+                  compartidos: 0
+                  createdAt: "2024-07-08T12:00:00Z"
+                  updatedAt: "2024-07-08T12:00:00Z"
+        '400':
+          description: Error de validación
+          content:
+            application/json:
+              example:
+                error: Faltan campos requeridos
+  /blog/{id}:
+    get:
+      summary: Obtener post por ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Post encontrado
+          content:
+            application/json:
+              example:
+                id: 1
+                titulo: Primer post
+                contenido: "Contenido del post"
+                autorId: 1
+                autorTipo: usuario
+                compartidos: 2
+                createdAt: "2024-07-08T12:00:00Z"
+                updatedAt: "2024-07-08T12:00:00Z"
+                BlogPostMedia:
+                  - id: 1
+                    blogPostId: 1
+                    ruta: "https://cloudinary.com/imagen1.jpg"
+                    tipo: "image/jpeg"
+                    tamano: 12345
+                BlogPostReaction:
+                  - id: 1
+                    blogPostId: 1
+                    userId: 2
+                    tipo: like
+                Categoria:
+                  nombre: Noticias
+        '404':
+          description: No encontrado
+          content:
+            application/json:
+              example:
+                error: Post no encontrado
+    put:
+      summary: Actualizar post
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                titulo:
+                  type: string
+                  example: Post actualizado
+                contenido:
+                  type: string
+                  example: "Nuevo contenido"
+      responses:
+        '200':
+          description: Post actualizado
+          content:
+            application/json:
+              example:
+                mensaje: Post actualizado
+                post:
+                  id: 1
+                  titulo: Post actualizado
+                  contenido: "Nuevo contenido"
+                  autorId: 1
+                  autorTipo: usuario
+                  compartidos: 2
+                  createdAt: "2024-07-08T12:00:00Z"
+                  updatedAt: "2024-07-08T12:10:00Z"
+        '403':
+          description: No autorizado
+          content:
+            application/json:
+              example:
+                error: No autorizado para editar este post
+        '404':
+          description: No encontrado
+          content:
+            application/json:
+              example:
+                error: Post no encontrado
+    delete:
+      summary: Eliminar post
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Post eliminado
+          content:
+            application/json:
+              example:
+                mensaje: Post eliminado correctamente
+        '403':
+          description: No autorizado
+          content:
+            application/json:
+              example:
+                error: No autorizado para eliminar este post
+        '404':
+          description: No encontrado
+          content:
+            application/json:
+              example:
+                error: Post no encontrado
+  /blog/{id}/media:
+    post:
+      summary: Subir media a un post
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                imagen:
+                  type: string
+                  format: binary
+                blogPostId:
+                  type: integer
+                  example: 1
+      responses:
+        '201':
+          description: Media agregada
+          content:
+            application/json:
+              example:
+                mensaje: Media agregada
+                media:
+                  id: 1
+                  blogPostId: 1
+                  ruta: "https://cloudinary.com/imagen1.jpg"
+                  tipo: "image/jpeg"
+                  tamano: 12345
+    get:
+      summary: Obtener media de un post
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Lista de media
+          content:
+            application/json:
+              example:
+                - id: 1
+                  blogPostId: 1
+                  ruta: "https://cloudinary.com/imagen1.jpg"
+                  tipo: "image/jpeg"
+                  tamano: 12345
+  /blog/{id}/reaccion:
+    post:
+      summary: Añadir o actualizar reacción a un post
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                blogPostId:
+                  type: integer
+                  example: 1
+                tipo:
+                  type: string
+                  enum: [like, love, haha, wow, sad, angry]
+                  example: like
+      responses:
+        '200':
+          description: Reacción registrada
+          content:
+            application/json:
+              example:
+                mensaje: Reacción registrada
+                reaccion:
+                  id: 1
+                  blogPostId: 1
+                  userId: 2
+                  tipo: like
+  /blog/{id}/reacciones:
+    get:
+      summary: Obtener reacciones de un post
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Lista de reacciones
+          content:
+            application/json:
+              example:
+                - id: 1
+                  blogPostId: 1
+                  userId: 2
+                  tipo: like
+  /comentario:
+    get:
+      summary: Obtener todos los comentarios
+      responses:
+        '200':
+          description: Lista de comentarios
+          content:
+            application/json:
+              example:
+                - id: 1
+                  contenido: "Comentario de ejemplo"
+                  blogPostId: 1
+                  autorId: 2
+                  autorTipo: usuario
+                  parentId: null
+                  createdAt: "2024-07-08T12:00:00Z"
+                  updatedAt: "2024-07-08T12:00:00Z"
+    post:
+      summary: Crear comentario
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                contenido:
+                  type: string
+                  example: "Nuevo comentario"
+                blogPostId:
+                  type: integer
+                  example: 1
+                autorId:
+                  type: integer
+                  example: 2
+                autorTipo:
+                  type: string
+                  example: usuario
+                parentId:
+                  type: integer
+                  example: null
+      responses:
+        '201':
+          description: Comentario creado
+          content:
+            application/json:
+              example:
+                mensaje: Comentario creado
+                comentario:
+                  id: 2
+                  contenido: "Nuevo comentario"
+                  blogPostId: 1
+                  autorId: 2
+                  autorTipo: usuario
+                  parentId: null
+                  createdAt: "2024-07-08T12:00:00Z"
+                  updatedAt: "2024-07-08T12:00:00Z"
+        '400':
+          description: Error de validación
+          content:
+            application/json:
+              example:
+                error: Faltan campos requeridos
+  /comentario/{id}:
+    get:
+      summary: Obtener comentario por ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Comentario encontrado
+          content:
+            application/json:
+              example:
+                id: 1
+                contenido: "Comentario de ejemplo"
+                blogPostId: 1
+                autorId: 2
+                autorTipo: usuario
+                parentId: null
+                createdAt: "2024-07-08T12:00:00Z"
+                updatedAt: "2024-07-08T12:00:00Z"
+        '404':
+          description: No encontrado
+          content:
+            application/json:
+              example:
+                error: Comentario no encontrado
+    put:
+      summary: Actualizar comentario
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                contenido:
+                  type: string
+                  example: "Comentario actualizado"
+      responses:
+        '200':
+          description: Comentario actualizado
+          content:
+            application/json:
+              example:
+                mensaje: Comentario actualizado
+                comentario:
+                  id: 1
+                  contenido: "Comentario actualizado"
+                  blogPostId: 1
+                  autorId: 2
+                  autorTipo: usuario
+                  parentId: null
+                  createdAt: "2024-07-08T12:00:00Z"
+                  updatedAt: "2024-07-08T12:10:00Z"
+        '403':
+          description: No autorizado
+          content:
+            application/json:
+              example:
+                error: No autorizado para editar este comentario
+        '404':
+          description: No encontrado
+          content:
+            application/json:
+              example:
+                error: Comentario no encontrado
+    delete:
+      summary: Eliminar comentario
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Comentario eliminado
+          content:
+            application/json:
+              example:
+                mensaje: Comentario eliminado correctamente
+        '403':
+          description: No autorizado
+          content:
+            application/json:
+              example:
+                error: No autorizado para eliminar este comentario
+        '404':
+          description: No encontrado
+          content:
+            application/json:
+              example:
+                error: Comentario no encontrado
+  /comentario/{id}/media:
+    post:
+      summary: Subir media a un comentario
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                imagen:
+                  type: string
+                  format: binary
+                comentarioId:
+                  type: integer
+                  example: 1
+      responses:
+        '201':
+          description: Media agregada
+          content:
+            application/json:
+              example:
+                mensaje: Media agregada
+                media:
+                  id: 1
+                  comentarioId: 1
+                  ruta: "https://cloudinary.com/imagen1.jpg"
+                  tipo: "image/jpeg"
+                  tamano: 12345
+    get:
+      summary: Obtener media de un comentario
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Lista de media
+          content:
+            application/json:
+              example:
+                - id: 1
+                  comentarioId: 1
+                  ruta: "https://cloudinary.com/imagen1.jpg"
+                  tipo: "image/jpeg"
+                  tamano: 12345
+  /comentario/{id}/reaccion:
+    post:
+      summary: Añadir o actualizar reacción a un comentario
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                comentarioId:
+                  type: integer
+                  example: 1
+                tipo:
+                  type: string
+                  enum: [like, love, haha, wow, sad, angry]
+                  example: like
+      responses:
+        '200':
+          description: Reacción registrada
+          content:
+            application/json:
+              example:
+                mensaje: Reacción registrada
+                reaccion:
+                  id: 1
+                  comentarioId: 1
+                  userId: 2
+                  tipo: like
+  /comentario/{id}/reacciones:
+    get:
+      summary: Obtener reacciones de un comentario
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Lista de reacciones
+          content:
+            application/json:
+              example:
+                - id: 1
+                  comentarioId: 1
+                  userId: 2
+                  tipo: like
+  /comentario/post/{blogPostId}/anidados:
+    get:
+      summary: Obtener comentarios anidados de un post
+      parameters:
+        - in: path
+          name: blogPostId
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Árbol de comentarios
+          content:
+            application/json:
+              example:
+                - id: 1
+                  contenido: "Padre"
+                  blogPostId: 1
+                  autorId: 2
+                  autorTipo: usuario
+                  parentId: null
+                  respuestas:
+                    - id: 2
+                      contenido: "Hijo"
+                      blogPostId: 1
+                      autorId: 3
+                      autorTipo: usuario
+                      parentId: 1
+                      respuestas: []
+  /categoria:
+    get:
+      summary: Obtener todas las categorías
+      responses:
+        '200':
+          description: Lista de categorías
+          content:
+            application/json:
+              example:
+                - id: 1
+                  nombre: Noticias
+                  descripcion: Noticias y novedades
+                  createdAt: "2024-07-08T12:00:00Z"
+                  updatedAt: "2024-07-08T12:00:00Z"
+    post:
+      summary: Crear categoría
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nombre:
+                  type: string
+                  example: Noticias
+                descripcion:
+                  type: string
+                  example: Noticias y novedades
+      responses:
+        '201':
+          description: Categoría creada
+          content:
+            application/json:
+              example:
+                mensaje: Categoría creada
+                categoria:
+                  id: 2
+                  nombre: Noticias
+                  descripcion: Noticias y novedades
+                  createdAt: "2024-07-08T12:00:00Z"
+                  updatedAt: "2024-07-08T12:00:00Z"
+  /categoria/{id}:
+    get:
+      summary: Obtener categoría por ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Categoría encontrada
+          content:
+            application/json:
+              example:
+                id: 1
+                nombre: Noticias
+                descripcion: Noticias y novedades
+                createdAt: "2024-07-08T12:00:00Z"
+                updatedAt: "2024-07-08T12:00:00Z"
+        '404':
+          description: No encontrado
+          content:
+            application/json:
+              example:
+                error: Categoría no encontrada
+    put:
+      summary: Actualizar categoría
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nombre:
+                  type: string
+                  example: Noticias
+                descripcion:
+                  type: string
+                  example: Noticias y novedades
+      responses:
+        '200':
+          description: Categoría actualizada
+          content:
+            application/json:
+              example:
+                mensaje: Categoría actualizada
+                categoria:
+                  id: 1
+                  nombre: Noticias
+                  descripcion: Noticias y novedades
+                  createdAt: "2024-07-08T12:00:00Z"
+                  updatedAt: "2024-07-08T12:10:00Z"
+        '404':
+          description: No encontrado
+          content:
+            application/json:
+              example:
+                error: Categoría no encontrada
+    delete:
+      summary: Eliminar categoría
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Categoría eliminada
+          content:
+            application/json:
+              example:
+                mensaje: Categoría eliminada correctamente
+        '404':
+          description: No encontrado
+          content:
+            application/json:
+              example:
+                error: Categoría no encontrada
+  /empresa:
+    get:
+      summary: Obtener todas las empresas
+      responses:
+        '200':
+          description: Lista de empresas
+          content:
+            application/json:
+              example:
+                - id: 1
+                  nombre: Empresa A
+                  descripcion: Descripción de la empresa A
+                  createdAt: "2024-07-08T12:00:00Z"
+                  updatedAt: "2024-07-08T12:00:00Z"
+    post:
+      summary: Crear empresa
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nombre:
+                  type: string
+                  example: Empresa A
+                descripcion:
+                  type: string
+                  example: Descripción de la empresa A
+      responses:
+        '201':
+          description: Empresa creada
+          content:
+            application/json:
+              example:
+                mensaje: Empresa creada
+                empresa:
+                  id: 2
+                  nombre: Empresa A
+                  descripcion: Descripción de la empresa A
+                  createdAt: "2024-07-08T12:00:00Z"
+                  updatedAt: "2024-07-08T12:00:00Z"
+  /empresa/{id}:
+    get:
+      summary: Obtener empresa por ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Empresa encontrada
+          content:
+            application/json:
+              example:
+                id: 1
+                nombre: Empresa A
+                descripcion: Descripción de la empresa A
+                createdAt: "2024-07-08T12:00:00Z"
+                updatedAt: "2024-07-08T12:00:00Z"
+        '404':
+          description: No encontrado
+          content:
+            application/json:
+              example:
+                error: Empresa no encontrada
+    put:
+      summary: Actualizar empresa
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nombre:
+                  type: string
+                  example: Empresa A
+                descripcion:
+                  type: string
+                  example: Descripción de la empresa A
+      responses:
+        '200':
+          description: Empresa actualizada
+          content:
+            application/json:
+              example:
+                mensaje: Empresa actualizada
+                empresa:
+                  id: 1
+                  nombre: Empresa A
+                  descripcion: Descripción de la empresa A
+                  createdAt: "2024-07-08T12:00:00Z"
+                  updatedAt: "2024-07-08T12:10:00Z"
+        '404':
+          description: No encontrado
+          content:
+            application/json:
+              example:
+                error: Empresa no encontrada
+    delete:
+      summary: Eliminar empresa
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Empresa eliminada
+          content:
+            application/json:
+              example:
+                mensaje: Empresa eliminada correctamente
+        '404':
+          description: No encontrado
+          content:
+            application/json:
+              example:
+                error: Empresa no encontrada
+  /estudiante:
+    get:
+      summary: Obtener todos los estudiantes
+      responses:
+        '200':
+          description: Lista de estudiantes
+          content:
+            application/json:
+              example:
+                - id: 1
+                  nombre: Estudiante A
+                  email: estudiante@mail.com
+                  createdAt: "2024-07-08T12:00:00Z"
+                  updatedAt: "2024-07-08T12:00:00Z"
+    post:
+      summary: Crear estudiante
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nombre:
+                  type: string
+                  example: Estudiante A
+                email:
+                  type: string
+                  example: estudiante@mail.com
+                password:
+                  type: string
+                  example: "1234"
+      responses:
+        '201':
+          description: Estudiante creado
+          content:
+            application/json:
+              example:
+                mensaje: Estudiante creado
+                estudiante:
+                  id: 2
+                  nombre: Estudiante A
+                  email: estudiante@mail.com
+                  createdAt: "2024-07-08T12:00:00Z"
+                  updatedAt: "2024-07-08T12:00:00Z"
+  /estudiante/{id}:
+    get:
+      summary: Obtener estudiante por ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Estudiante encontrado
+          content:
+            application/json:
+              example:
+                id: 1
+                nombre: Estudiante A
+                email: estudiante@mail.com
+                createdAt: "2024-07-08T12:00:00Z"
+                updatedAt: "2024-07-08T12:00:00Z"
+        '404':
+          description: No encontrado
+          content:
+            application/json:
+              example:
+                error: Estudiante no encontrado
+    put:
+      summary: Actualizar estudiante
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nombre:
+                  type: string
+                  example: Estudiante A
+                email:
+                  type: string
+                  example: estudiante@mail.com
+      responses:
+        '200':
+          description: Estudiante actualizado
+          content:
+            application/json:
+              example:
+                mensaje: Estudiante actualizado
+                estudiante:
+                  id: 1
+                  nombre: Estudiante A
+                  email: estudiante@mail.com
+                  createdAt: "2024-07-08T12:00:00Z"
+                  updatedAt: "2024-07-08T12:10:00Z"
+        '404':
+          description: No encontrado
+          content:
+            application/json:
+              example:
+                error: Estudiante no encontrado
+    delete:
+      summary: Eliminar estudiante
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Estudiante eliminado
+          content:
+            application/json:
+              example:
+                mensaje: Estudiante eliminado correctamente
+        '404':
+          description: No encontrado
+          content:
+            application/json:
+              example:
+                error: Estudiante no encontrado
+  /oferta:
+    get:
+      summary: Obtener todas las ofertas
+      responses:
+        '200':
+          description: Lista de ofertas
+          content:
+            application/json:
+              example:
+                - id: 1
+                  titulo: Oferta de trabajo 1
+                  descripcion: Descripción de la oferta 1
+                  empresaId: 1
+                  createdAt: "2024-07-08T12:00:00Z"
+                  updatedAt: "2024-07-08T12:00:00Z"
+    post:
+      summary: Crear oferta
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                titulo:
+                  type: string
+                  example: Oferta de trabajo 1
+                descripcion:
+                  type: string
+                  example: Descripción de la oferta 1
+                empresaId:
+                  type: integer
+                  example: 1
+      responses:
+        '201':
+          description: Oferta creada
+          content:
+            application/json:
+              example:
+                mensaje: Oferta creada
+                oferta:
+                  id: 2
+                  titulo: Oferta de trabajo 1
+                  descripcion: Descripción de la oferta 1
+                  empresaId: 1
+                  createdAt: "2024-07-08T12:00:00Z"
+                  updatedAt: "2024-07-08T12:00:00Z"
+  /oferta/{id}:
+    get:
+      summary: Obtener oferta por ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Oferta encontrada
+          content:
+            application/json:
+              example:
+                id: 1
+                titulo: Oferta de trabajo 1
+                descripcion: Descripción de la oferta 1
+                empresaId: 1
+                createdAt: "2024-07-08T12:00:00Z"
+                updatedAt: "2024-07-08T12:00:00Z"
+        '404':
+          description: No encontrado
+          content:
+            application/json:
+              example:
+                error: Oferta no encontrada
+    put:
+      summary: Actualizar oferta
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                titulo:
+                  type: string
+                  example: Oferta de trabajo 1
+                descripcion:
+                  type: string
+                  example: Descripción de la oferta 1
+      responses:
+        '200':
+          description: Oferta actualizada
+          content:
+            application/json:
+              example:
+                mensaje: Oferta actualizada
+                oferta:
+                  id: 1
+                  titulo: Oferta de trabajo 1
+                  descripcion: Descripción de la oferta 1
+                  empresaId: 1
+                  createdAt: "2024-07-08T12:00:00Z"
+                  updatedAt: "2024-07-08T12:10:00Z"
+        '404':
+          description: No encontrado
+          content:
+            application/json:
+              example:
+                error: Oferta no encontrada
+    delete:
+      summary: Eliminar oferta
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Oferta eliminada
+          content:
+            application/json:
+              example:
+                mensaje: Oferta eliminada correctamente
+        '404':
+          description: No encontrado
+          content:
+            application/json:
+              example:
+                error: Oferta no encontrada
+  /postulacion:
+    get:
+      summary: Obtener todas las postulaciones
+      responses:
+        '200':
+          description: Lista de postulaciones
+          content:
+            application/json:
+              example:
+                - id: 1
+                  ofertaId: 1
+                  estudianteId: 1
+                  createdAt: "2024-07-08T12:00:00Z"
+                  updatedAt: "2024-07-08T12:00:00Z"
+    post:
+      summary: Crear postulacion
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ofertaId:
+                  type: integer
+                  example: 1
+                estudianteId:
+                  type: integer
+                  example: 1
+      responses:
+        '201':
+          description: Postulacion creada
+          content:
+            application/json:
+              example:
+                mensaje: Postulacion creada
+                postulacion:
+                  id: 2
+                  ofertaId: 1
+                  estudianteId: 1
+                  createdAt: "2024-07-08T12:00:00Z"
+                  updatedAt: "2024-07-08T12:00:00Z"
+  /postulacion/{id}:
+    get:
+      summary: Obtener postulacion por ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Postulacion encontrada
+          content:
+            application/json:
+              example:
+                id: 1
+                ofertaId: 1
+                estudianteId: 1
+                createdAt: "2024-07-08T12:00:00Z"
+                updatedAt: "2024-07-08T12:00:00Z"
+        '404':
+          description: No encontrado
+          content:
+            application/json:
+              example:
+                error: Postulacion no encontrada
+    put:
+      summary: Actualizar postulacion
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ofertaId:
+                  type: integer
+                  example: 1
+                estudianteId:
+                  type: integer
+                  example: 1
+      responses:
+        '200':
+          description: Postulacion actualizada
+          content:
+            application/json:
+              example:
+                mensaje: Postulacion actualizada
+                postulacion:
+                  id: 1
+                  ofertaId: 1
+                  estudianteId: 1
+                  createdAt: "2024-07-08T12:00:00Z"
+                  updatedAt: "2024-07-08T12:10:00Z"
+        '404':
+          description: No encontrado
+          content:
+            application/json:
+              example:
+                error: Postulacion no encontrada
+    delete:
+      summary: Eliminar postulacion
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Postulacion eliminada
+          content:
+            application/json:
+              example:
+                mensaje: Postulacion eliminada correctamente
+        '404':
+          description: No encontrado
+          content:
+            application/json:
+              example:
+                error: Postulacion no encontrada
+  /pregunta-oferta:
+    get:
+      summary: Obtener todas las preguntas de oferta
+      responses:
+        '200':
+          description: Lista de preguntas de oferta
+          content:
+            application/json:
+              example:
+                - id: 1
+                  pregunta: "¿Qué es un post?"
+                  ofertaId: 1
+                  createdAt: "2024-07-08T12:00:00Z"
+                  updatedAt: "2024-07-08T12:00:00Z"
+    post:
+      summary: Crear pregunta de oferta
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                pregunta:
+                  type: string
+                  example: "¿Qué es un post?"
+                ofertaId:
+                  type: integer
+                  example: 1
+      responses:
+        '201':
+          description: Pregunta de oferta creada
+          content:
+            application/json:
+              example:
+                mensaje: Pregunta de oferta creada
+                pregunta:
+                  id: 2
+                  pregunta: "¿Qué es un post?"
+                  ofertaId: 1
+                  createdAt: "2024-07-08T12:00:00Z"
+                  updatedAt: "2024-07-08T12:00:00Z"
+  /pregunta-oferta/{id}:
+    get:
+      summary: Obtener pregunta de oferta por ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Pregunta de oferta encontrada
+          content:
+            application/json:
+              example:
+                id: 1
+                pregunta: "¿Qué es un post?"
+                ofertaId: 1
+                createdAt: "2024-07-08T12:00:00Z"
+                updatedAt: "2024-07-08T12:00:00Z"
+        '404':
+          description: No encontrado
+          content:
+            application/json:
+              example:
+                error: Pregunta de oferta no encontrada
+    put:
+      summary: Actualizar pregunta de oferta
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                pregunta:
+                  type: string
+                  example: "¿Qué es un post?"
+      responses:
+        '200':
+          description: Pregunta de oferta actualizada
+          content:
+            application/json:
+              example:
+                mensaje: Pregunta de oferta actualizada
+                pregunta:
+                  id: 1
+                  pregunta: "¿Qué es un post?"
+                  ofertaId: 1
+                  createdAt: "2024-07-08T12:00:00Z"
+                  updatedAt: "2024-07-08T12:10:00Z"
+        '404':
+          description: No encontrado
+          content:
+            application/json:
+              example:
+                error: Pregunta de oferta no encontrada
+    delete:
+      summary: Eliminar pregunta de oferta
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Pregunta de oferta eliminada
+          content:
+            application/json:
+              example:
+                mensaje: Pregunta de oferta eliminada correctamente
+        '404':
+          description: No encontrado
+          content:
+            application/json:
+              example:
+                error: Pregunta de oferta no encontrada
+  /upload:
+    post:
+      summary: Subir archivo
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                archivo:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Archivo subido
+          content:
+            application/json:
+              example:
+                mensaje: Archivo subido
+                archivo:
+                  id: 1
+                  nombre: archivo.jpg
+                  ruta: "https://cloudinary.com/archivo.jpg"
+                  tipo: "image/jpeg"
+                  tamano: 12345
+        '400':
+          description: Error de validación
+          content:
+            application/json:
+              example:
+                error: Faltan campos requeridos 
+  /chat:
+    get:
+      summary: Obtener todos los chats del usuario autenticado
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Lista de chats
+          content:
+            application/json:
+              example:
+                - _id: 60f7c2e2e1b1c8a1b8e4d123
+                  users: [1, 2]
+                  lastMessage:
+                    text: "¡Hola!"
+                    sender: 1
+                    timestamp: "2024-07-08T12:00:00Z"
+                  createdAt: "2024-07-08T12:00:00Z"
+                  updatedAt: "2024-07-08T12:00:00Z"
+  /chat/{chatId}/messages:
+    get:
+      summary: Obtener mensajes de un chat
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: chatId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de mensajes
+          content:
+            application/json:
+              example:
+                - _id: 60f7c2e2e1b1c8a1b8e4d456
+                  chatId: 60f7c2e2e1b1c8a1b8e4d123
+                  sender: 1
+                  receiver: 2
+                  text: "¡Hola!"
+                  read: false
+                  timestamp: "2024-07-08T12:00:00Z"
+  /chat/{chatId}/read:
+    post:
+      summary: Marcar mensajes como leídos en un chat
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: chatId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Mensajes marcados como leídos
+          content:
+            application/json:
+              example:
+                mensaje: Mensajes marcados como leídos 
+  /chat/start:
+    post:
+      summary: Iniciar chat directo (o devolver el existente)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                otherUserId:
+                  type: integer
+                  example: 2
+      responses:
+        '200':
+          description: Chat iniciado/devuelto
+          content:
+            application/json:
+              example:
+                _id: 60f7c2e2e1b1c8a1b8e4d123
+                users: [1, 2]
+                lastMessage: null
+                createdAt: "2024-07-08T12:00:00Z"
+                updatedAt: "2024-07-08T12:00:00Z"
+        '400':
+          description: Falta el ID del otro usuario
+          content:
+            application/json:
+              example:
+                error: Falta el ID del otro usuario
+  /chat/search:
+    get:
+      summary: Buscar chats por usuario
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: userId
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Lista de chats encontrados
+          content:
+            application/json:
+              example:
+                - _id: 60f7c2e2e1b1c8a1b8e4d123
+                  users: [1, 2]
+                  lastMessage:
+                    text: "¡Hola!"
+                    sender: 1
+                    timestamp: "2024-07-08T12:00:00Z"
+                  createdAt: "2024-07-08T12:00:00Z"
+                  updatedAt: "2024-07-08T12:00:00Z"
+        '400':
+          description: Falta userId
+          content:
+            application/json:
+              example:
+                error: Falta userId 
+  /chat/{chatId}:
+    delete:
+      summary: Eliminar un chat (solo si el usuario es parte)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: chatId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Chat eliminado correctamente
+          content:
+            application/json:
+              example:
+                mensaje: Chat eliminado correctamente
+        '403':
+          description: No autorizado
+          content:
+            application/json:
+              example:
+                error: No autorizado para eliminar este chat
+  /chat/{chatId}/messages/{messageId}:
+    delete:
+      summary: Eliminar un mensaje propio
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: chatId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: messageId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Mensaje eliminado correctamente
+          content:
+            application/json:
+              example:
+                mensaje: Mensaje eliminado correctamente
+        '403':
+          description: No autorizado
+          content:
+            application/json:
+              example:
+                error: No autorizado para eliminar este mensaje
+  /chat/unread-count:
+    get:
+      summary: Obtener conteo de mensajes no leídos por chat
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Conteo de mensajes no leídos por chat
+          content:
+            application/json:
+              example:
+                - chatId: 60f7c2e2e1b1c8a1b8e4d123
+                  unread: 3 
+  /chat/{chatId}/media:
+    post:
+      summary: Subir adjunto a un chat (mensaje con archivo)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: chatId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                archivo:
+                  type: string
+                  format: binary
+                texto:
+                  type: string
+                  example: "Mensaje opcional con archivo adjunto"
+      responses:
+        '201':
+          description: Adjunto enviado
+          content:
+            application/json:
+              example:
+                mensaje: Adjunto enviado
+                message:
+                  _id: 60f7c2e2e1b1c8a1b8e4d456
+                  chatId: 60f7c2e2e1b1c8a1b8e4d123
+                  sender: 1
+                  receiver: 2
+                  text: "Mensaje opcional con archivo adjunto"
+                  media:
+                    url: "https://cloudinary.com/archivo.pdf"
+                    tipo: "application/pdf"
+                    tamano: 12345
+                  timestamp: "2024-07-08T12:00:00Z"
+        '400':
+          description: Error de validación
+          content:
+            application/json:
+              example:
+                error: Faltan campos requeridos
+
+  /chat/{chatId}/messages/{messageId}/media:
+    get:
+      summary: Obtener adjuntos de un mensaje
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: chatId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: messageId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de adjuntos del mensaje
+          content:
+            application/json:
+              example:
+                media:
+                  url: "https://cloudinary.com/archivo.pdf"
+                  tipo: "application/pdf"
+                  tamano: 12345
+        '404':
+          description: No encontrado
+          content:
+            application/json:
+              example:
+                error: Mensaje o adjunto no encontrado 
