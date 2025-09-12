@@ -1,25 +1,32 @@
 // src/middlewares/requireCompleteProfile.js
-const { Usuario, Estudiante, Empresa } = require('../models');
+const { prisma } = require('../config/database');
 
 const requireCompleteProfile = async (req, res, next) => {
   try {
     const userId = req.user.id;
     
-    const user = await Usuario.findByPk(userId);
+    const user = await prisma.usuario.findUnique({
+      where: { id: userId },
+      include: {
+        empresa: true,
+        estudiante: true
+      }
+    });
+    
     if (!user) {
       return res.status(404).json({ error: 'Usuario no encontrado' });
     }
 
     // Verificar si tiene perfil específico
     let perfilEspecifico = null;
-    if (user.rol === 'empresa') {
-      perfilEspecifico = await Empresa.findOne({ where: { usuarioId: userId } });
-    } else if (user.rol === 'estudiante' || user.rol === 'egresado') {
-      perfilEspecifico = await Estudiante.findOne({ where: { usuarioId: userId } });
+    if (user.rol === 'EMPRESA') {
+      perfilEspecifico = user.empresa;
+    } else if (user.rol === 'ESTUDIANTE' || user.rol === 'EGRESADO') {
+      perfilEspecifico = user.estudiante;
     }
 
     if (!perfilEspecifico) {
-      const redirectTo = user.rol === 'empresa' ? 
+      const redirectTo = user.rol === 'EMPRESA' ? 
         '/auth/completar-perfil-empresa' : 
         '/perfil/completar';
         
@@ -33,7 +40,10 @@ const requireCompleteProfile = async (req, res, next) => {
 
     // Actualizar perfilCompleto si es necesario
     if (!user.perfilCompleto) {
-      await user.update({ perfilCompleto: true });
+      await prisma.usuario.update({
+        where: { id: userId },
+        data: { perfilCompleto: true }
+      });
     }
 
     next();

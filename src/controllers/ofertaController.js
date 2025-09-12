@@ -1,4 +1,4 @@
-const { Oferta, Empresa, PreguntaOferta, RequisitoOferta } = require('../models');
+const { prisma } = require('../config/database');
 
 // Datos de ubicaciones de Perú (copiados del controlador de ubicaciones)
 const UBICACIONES_PERU = {
@@ -61,63 +61,118 @@ const getUbicacionNombres = (departamentoId, provinciaId, distritoId) => {
 
 exports.crearOferta = async (req, res) => {
   try {
-    const { titulo, descripcion, duracion, requiereCV, requiereCarta, empresaId, requisitos, preguntas, modalidad, salario, departamento, provincia, distrito } = req.body;
+    console.log('📝 Datos recibidos para crear oferta:', req.body);
+    console.log('👤 Usuario autenticado:', req.user);
+    
+    const { titulo, descripcion, duracion, requiereCV, requiereCarta, requisitos, preguntas, modalidad, salario, departamento, provincia, distrito } = req.body;
 
-    // Crear la oferta
-    const nuevaOferta = await Oferta.create({
-      titulo,
-      descripcion,
-      requisitos,
-      modalidad,
-      salario,
-      departamento,
-      provincia,
-      distrito,
-      duracion,
-      requiereCV,
-      requiereCarta,
-      empresaId
+    // Validar que el usuario sea una empresa
+    if (req.user.rol !== 'EMPRESA') {
+      return res.status(403).json({
+        success: false,
+        error: 'Solo las empresas pueden crear ofertas'
+      });
+    }
+
+    // Obtener la empresa del usuario autenticado
+    const empresa = await prisma.empresa.findUnique({
+      where: { usuarioId: req.user.id }
+    });
+
+    if (!empresa) {
+      return res.status(404).json({
+        success: false,
+        error: 'No se encontró el perfil de empresa asociado al usuario'
+      });
+    }
+
+    // Crear la oferta con Prisma
+    const nuevaOferta = await prisma.oferta.create({
+      data: {
+        titulo,
+        descripcion,
+        duracion,
+        requiereCV: requiereCV || true,
+        requiereCarta: requiereCarta || false,
+        empresaId: empresa.id
+      }
     });
 
     // Crear requisitos si existen
     if (requisitos && Array.isArray(requisitos) && requisitos.length > 0) {
       const requisitosACrear = requisitos.map((req, index) => ({
         ofertaId: nuevaOferta.id,
+        requisito: req.descripcion || req.requisito,
         descripcion: req.descripcion,
         tipo: req.tipo || 'obligatorio',
         categoria: req.categoria || 'otro',
         orden: req.orden || index + 1
       }));
-      await RequisitoOferta.bulkCreate(requisitosACrear);
+      
+      await prisma.requisitoOferta.createMany({
+        data: requisitosACrear
+      });
     }
 
     // Crear preguntas si existen
     if (preguntas && Array.isArray(preguntas) && preguntas.length > 0) {
+      // Mapear tipos de pregunta del frontend a Prisma
+      const mapearTipoPregunta = (tipo) => {
+        const mapeo = {
+          'text': 'TEXT',
+          'number': 'NUMBER', 
+          'select': 'SELECT',
+          'textarea': 'TEXTAREA',
+          'test': 'SELECT' // Mapear 'test' a 'SELECT' para compatibilidad
+        };
+        return mapeo[tipo] || 'TEXT';
+      };
+
       const preguntasACrear = preguntas.map((preg, index) => ({
         ofertaId: nuevaOferta.id,
-        pregunta: preg.texto,
-        tipo: preg.tipo,
-        opciones: preg.tipo === 'test' ? JSON.stringify(preg.opciones) : null,
-        requerida: true, // Puedes ajustar esto según el frontend
+        pregunta: preg.texto || preg.pregunta,
+        tipo: mapearTipoPregunta(preg.tipo),
+        opciones: (preg.tipo === 'select' || preg.tipo === 'test') ? preg.opciones : null,
+        requerida: preg.requerida || false,
         orden: index + 1
       }));
-      await PreguntaOferta.bulkCreate(preguntasACrear);
+      
+      await prisma.preguntaOferta.createMany({
+        data: preguntasACrear
+      });
     }
 
-    // Retornar oferta con requisitos y preguntas
-    const ofertaCompleta = await Oferta.findByPk(nuevaOferta.id, {
-      include: [
-        { model: RequisitoOferta, order: [['orden', 'ASC']] },
-        { model: PreguntaOferta, order: [['orden', 'ASC']] }
-      ]
+    // Obtener la oferta completa con relaciones
+    const ofertaCompleta = await prisma.oferta.findUnique({
+      where: { id: nuevaOferta.id },
+      include: {
+        requisitos: {
+          orderBy: { orden: 'asc' }
+        },
+        preguntas: {
+          orderBy: { orden: 'asc' }
+        },
+        empresa: {
+          select: {
+            id: true,
+            nombre_empresa: true,
+            rubro: true
+          }
+        }
+      }
     });
 
     res.status(201).json({ 
+      success: true,
       mensaje: 'Oferta creada exitosamente', 
-      oferta: ofertaCompleta 
+      data: ofertaCompleta 
     });
   } catch (error) {
-    res.status(500).json({ error: 'Error al crear oferta', detalle: error.message });
+    console.error('Error al crear oferta:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Error interno del servidor al crear la oferta' 
+    });
   }
 };
 
