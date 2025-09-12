@@ -1,12 +1,17 @@
-const { Categoria } = require('../models');
-const { Op } = require('sequelize');
+const { prisma } = require('../config/database');
 
 // Obtener todas las categorías
 const getCategorias = async (req, res) => {
   try {
-    const categorias = await Categoria.findAll({
-      attributes: ['id', 'nombre', 'descripcion', 'createdAt', 'updatedAt'],
-      order: [['createdAt', 'DESC']]
+    const categorias = await prisma.categoria.findMany({
+      select: {
+        id: true,
+        nombre: true,
+        descripcion: true,
+        createdAt: true,
+        updatedAt: true
+      },
+      orderBy: { createdAt: 'desc' }
     });
 
     res.json({

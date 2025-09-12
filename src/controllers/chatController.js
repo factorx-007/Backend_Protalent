@@ -1,7 +1,7 @@
 const { MongoClient, ObjectId } = require('mongodb');
 
-const uri = process.env.MONGO_URI || 'mongodb://localhost:27017';
-const dbName = process.env.MONGO_DB || 'plataforma_practicas';
+const uri = process.env.DB_URI || 'mongodb://localhost:27017/protalent';
+const dbName = 'protalent';
 
 async function getDb() {
   const client = new MongoClient(uri);

@@ -1,0 +1,337 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===============================
+// MODELOS PRINCIPALES
+// ===============================
+
+model Usuario {
+  id             Int      @id @default(autoincrement())
+  nombre         String
+  email          String   @unique
+  password       String?  // Null para usuarios que se registran con Google
+  googleId       String?  @unique // ID único de Google OAuth
+  rol            Rol
+  perfilCompleto Boolean  @default(false) // Si el usuario completó su perfil específico
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relaciones
+  estudiante Estudiante?
+  empresa    Empresa?
+
+  @@map("Usuarios")
+}
+
+model Estudiante {
+  id           Int      @id @default(autoincrement())
+  usuarioId    Int      @unique
+  cv           String?  // URL del CV en Cloudinary
+  foto_perfil  String?  // URL de la foto de perfil en Cloudinary
+  carrera      String
+  año_egreso   Int?     // Solo para egresados
+  telefono     String?
+  tipo         TipoEstudiante
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relaciones
+  usuario       Usuario        @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  postulaciones Postulacion[]
+
+  @@map("Estudiantes")
+}
+
+model Empresa {
+  id             Int      @id @default(autoincrement())
+  usuarioId      Int      @unique
+  ruc            String   @unique
+  nombre_empresa String
+  rubro          String
+  descripcion    String?
+  direccion      String?
+  telefono       String?
+  logo_url       String?  // URL del logo en Cloudinary
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relaciones
+  usuario   Usuario    @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  ofertas   Oferta[]
+
+  @@map("Empresas")
+}
+
+// ===============================
+// SISTEMA DE OFERTAS
+// ===============================
+
+model Oferta {
+  id            Int      @id @default(autoincrement())
+  titulo        String
+  descripcion   String?
+  duracion      String?
+  requiereCV    Boolean  @default(true)
+  requiereCarta Boolean  @default(false)
+  empresaId     Int
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relaciones
+  empresa           Empresa             @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  requisitos        RequisitoOferta[]
+  postulaciones     Postulacion[]
+  preguntas         PreguntaOferta[]
+
+  @@map("Ofertas")
+}
+
+model RequisitoOferta {
+  id          Int      @id @default(autoincrement())
+  ofertaId    Int
+  requisito   String
+  descripcion String?
+  tipo        String?
+  categoria   String?
+  orden       Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relaciones
+  oferta Oferta @relation(fields: [ofertaId], references: [id], onDelete: Cascade)
+
+  @@map("RequisitoOfertas")
+}
+
+model Postulacion {
+  id           Int              @id @default(autoincrement())
+  mensaje      String?
+  estado       EstadoPostulacion @default(PENDIENTE)
+  estudianteId Int
+  ofertaId     Int
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  // Relaciones
+  estudiante Estudiante             @relation(fields: [estudianteId], references: [id], onDelete: Cascade)
+  oferta     Oferta                 @relation(fields: [ofertaId], references: [id], onDelete: Cascade)
+  respuestas RespuestaPostulacion[]
+
+  @@unique([estudianteId, ofertaId])
+  @@map("Postulaciones")
+}
+
+// ===============================
+// SISTEMA DE PREGUNTAS Y RESPUESTAS
+// ===============================
+
+model PreguntaOferta {
+  id         Int         @id @default(autoincrement())
+  ofertaId   Int
+  pregunta   String
+  tipo       TipoPregunta @default(TEXT)
+  opciones   Json?       // Array de opciones para tipo select
+  requerida  Boolean     @default(false)
+  orden      Int         @default(1)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  // Relaciones
+  oferta     Oferta                 @relation(fields: [ofertaId], references: [id], onDelete: Cascade)
+  respuestas RespuestaPostulacion[]
+
+  @@map("PreguntaOfertas")
+}
+
+model RespuestaPostulacion {
+  id               Int      @id @default(autoincrement())
+  postulacionId    Int
+  preguntaOfertaId Int
+  respuesta        String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  // Relaciones
+  postulacion    Postulacion    @relation(fields: [postulacionId], references: [id], onDelete: Cascade)
+  preguntaOferta PreguntaOferta @relation(fields: [preguntaOfertaId], references: [id], onDelete: Cascade)
+
+  @@unique([postulacionId, preguntaOfertaId])
+  @@map("RespuestaPostulaciones")
+}
+
+// ===============================
+// SISTEMA DE BLOG AVANZADO
+// ===============================
+
+model Categoria {
+  id          Int      @id @default(autoincrement())
+  nombre      String
+  descripcion String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relaciones
+  blogPosts BlogPost[]
+
+  @@map("Categorias")
+}
+
+model BlogPost {
+  id               Int      @id @default(autoincrement())
+  titulo           String
+  contenido        String
+  autorId          Int
+  autorTipo        AutorTipo @default(USUARIO)
+  categoriaId      Int?
+  compartidos      Int      @default(0)
+  publicado        Boolean  @default(true)
+  imagen_destacada String?  // URL de imagen destacada en Cloudinary
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  // Relaciones
+  categoria   Categoria?           @relation(fields: [categoriaId], references: [id], onDelete: SetNull)
+  comentarios Comentario[]
+  medias      BlogPostMedia[]
+  reacciones  BlogPostReaction[]
+
+  @@map("BlogPosts")
+}
+
+model BlogPostMedia {
+  id         Int      @id @default(autoincrement())
+  blogPostId Int
+  url        String
+  tipo       TipoMedia
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relaciones
+  blogPost BlogPost @relation(fields: [blogPostId], references: [id], onDelete: Cascade)
+
+  @@map("BlogPostMedias")
+}
+
+model BlogPostReaction {
+  id         Int      @id @default(autoincrement())
+  blogPostId Int
+  usuarioId  Int
+  tipo       TipoReaccion
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relaciones
+  blogPost BlogPost @relation(fields: [blogPostId], references: [id], onDelete: Cascade)
+
+  @@unique([blogPostId, usuarioId])
+  @@map("BlogPostReacciones")
+}
+
+model Comentario {
+  id        Int      @id @default(autoincrement())
+  blogPostId Int?    // Puede ser null para comentarios independientes
+  parentId  Int?     // Para comentarios anidados
+  autor     String
+  email     String
+  contenido String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relaciones
+  blogPost   BlogPost?            @relation(fields: [blogPostId], references: [id], onDelete: Cascade)
+  padre      Comentario?          @relation("ComentarioRespuestas", fields: [parentId], references: [id], onDelete: Cascade)
+  respuestas Comentario[]         @relation("ComentarioRespuestas")
+  medias     ComentarioMedia[]
+  reacciones ComentarioReaction[]
+
+  @@map("Comentarios")
+}
+
+model ComentarioMedia {
+  id           Int      @id @default(autoincrement())
+  comentarioId Int
+  url          String
+  tipo         TipoMedia
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relaciones
+  comentario Comentario @relation(fields: [comentarioId], references: [id], onDelete: Cascade)
+
+  @@map("ComentarioMedias")
+}
+
+model ComentarioReaction {
+  id           Int      @id @default(autoincrement())
+  comentarioId Int
+  usuarioId    Int
+  tipo         TipoReaccion
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relaciones
+  comentario Comentario @relation(fields: [comentarioId], references: [id], onDelete: Cascade)
+
+  @@unique([comentarioId, usuarioId])
+  @@map("ComentarioReacciones")
+}
+
+// ===============================
+// ENUMS
+// ===============================
+
+enum Rol {
+  ESTUDIANTE @map("estudiante")
+  EGRESADO   @map("egresado")
+  EMPRESA    @map("empresa")
+  ADMIN      @map("admin")
+}
+
+enum TipoEstudiante {
+  ESTUDIANTE @map("estudiante")
+  EGRESADO   @map("egresado")
+}
+
+enum EstadoPostulacion {
+  PENDIENTE @map("pendiente")
+  ACEPTADA  @map("aceptada")
+  RECHAZADA @map("rechazada")
+}
+
+enum TipoPregunta {
+  TEXT     @map("text")
+  NUMBER   @map("number")
+  SELECT   @map("select")
+  TEXTAREA @map("textarea")
+}
+
+enum AutorTipo {
+  USUARIO @map("usuario")
+  EMPRESA @map("empresa")
+  ADMIN   @map("admin")
+}
+
+enum TipoMedia {
+  IMAGEN @map("imagen")
+  VIDEO  @map("video")
+  AUDIO  @map("audio")
+}
+
+enum TipoReaccion {
+  LIKE    @map("like")
+  DISLIKE @map("dislike")
+  LOVE    @map("love")
+  HAHA    @map("haha")
+  WOW     @map("wow")
+  SAD     @map("sad")
+  ANGRY   @map("angry")
+}

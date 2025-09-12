@@ -1,7 +1,6 @@
 //src/controllers/authController.js
 const bcrypt = require('bcryptjs');
-const { Usuario, Estudiante, Empresa } = require('../models');
-const { Op } = require('sequelize');
+const { prisma } = require('../config/database');
 const { OAuth2Client } = require('google-auth-library');
 const generateToken = require('../utils/generateToken');
 
@@ -13,7 +12,7 @@ const register = async (req, res) => {
   const { nombre, email, password, rol, carrera, tipo, ruc, nombre_empresa, rubro } = req.body;
 
   try {
-    const existe = await Usuario.findOne({ where: { email } });
+    const existe = await prisma.usuario.findUnique({ where: { email } });
     if (existe) return res.status(400).json({ error: 'El email ya está en uso' });
 
     // Validaciones específicas por rol
@@ -28,29 +27,36 @@ const register = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
     
     // Crear usuario base
-    const user = await Usuario.create({
-      nombre,
-      email,
-      password: hashedPassword,
-      rol,
+    const user = await prisma.usuario.create({
+      data: {
+        nombre,
+        email,
+        password: hashedPassword,
+        rol: rol.toUpperCase(),
+        perfilCompleto: true
+      }
     });
 
     let perfil = null;
 
     // Crear perfil específico según el rol
     if (rol === 'estudiante' || rol === 'egresado') {
-      perfil = await Estudiante.create({
-        usuarioId: user.id,
-        carrera,
-        tipo: tipo || rol, // usar el tipo proporcionado o el rol como fallback
-        anio_egreso: req.body.anio_egreso
+      perfil = await prisma.estudiante.create({
+        data: {
+          usuarioId: user.id,
+          carrera,
+          tipo: (tipo || rol).toUpperCase(),
+          año_egreso: req.body.anio_egreso || req.body.año_egreso
+        }
       });
     } else if (rol === 'empresa') {
-      perfil = await Empresa.create({
-        usuarioId: user.id,
-        ruc,
-        nombreEmpresa: nombre_empresa, // <-- mapear correctamente el campo
-        rubro,
+      perfil = await prisma.empresa.create({
+        data: {
+          usuarioId: user.id,
+          ruc,
+          nombre_empresa,
+          rubro
+        }
       });
     }
 
@@ -79,7 +85,7 @@ const login = async (req, res) => {
   const { email, password } = req.body;
 
   try {
-    const user = await Usuario.findOne({ where: { email } });
+    const user = await prisma.usuario.findUnique({ where: { email } });
     if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
 
     const isMatch = await bcrypt.compare(password, user.password);
@@ -87,16 +93,19 @@ const login = async (req, res) => {
 
     // Verificar si tiene perfil específico completo
     let perfilEspecifico = null;
-    if (user.rol === 'empresa') {
-      perfilEspecifico = await Empresa.findOne({ where: { usuarioId: user.id } });
-    } else if (user.rol === 'estudiante' || user.rol === 'egresado') {
-      perfilEspecifico = await Estudiante.findOne({ where: { usuarioId: user.id } });
+    if (user.rol === 'EMPRESA') {
+      perfilEspecifico = await prisma.empresa.findUnique({ where: { usuarioId: user.id } });
+    } else if (user.rol === 'ESTUDIANTE' || user.rol === 'EGRESADO') {
+      perfilEspecifico = await prisma.estudiante.findUnique({ where: { usuarioId: user.id } });
     }
 
     // Actualizar perfilCompleto si es necesario
     const tienePerfilCompleto = !!perfilEspecifico;
     if (user.perfilCompleto !== tienePerfilCompleto) {
-      await user.update({ perfilCompleto: tienePerfilCompleto });
+      await prisma.usuario.update({
+        where: { id: user.id },
+        data: { perfilCompleto: tienePerfilCompleto }
+      });
     }
 
     const token = generateToken({ id: user.id, rol: user.rol });
@@ -125,20 +134,36 @@ const perfil = async (req, res) => {
       return res.status(401).json({ error: 'No autorizado o ID de usuario no encontrado en token' });
     }
 
-    const user = await Usuario.findByPk(req.user.id, {
-      attributes: ['id', 'nombre', 'email', 'rol'],
-      include: [
-        {
-          model: Estudiante,
-          required: false,
-          attributes: ['id', 'carrera', 'anio_egreso', 'telefono', 'tipo', 'cv', 'foto_perfil']
+    const user = await prisma.usuario.findUnique({
+      where: { id: req.user.id },
+      select: {
+        id: true,
+        nombre: true,
+        email: true,
+        rol: true,
+        estudiante: {
+          select: {
+            id: true,
+            carrera: true,
+            año_egreso: true,
+            telefono: true,
+            tipo: true,
+            cv: true,
+            foto_perfil: true
+          }
         },
-        {
-          model: Empresa,
-          required: false,
-          attributes: ['id', 'ruc', 'nombreEmpresa', 'rubro', 'descripcion', 'direccion', 'telefono']
+        empresa: {
+          select: {
+            id: true,
+            ruc: true,
+            nombre_empresa: true,
+            rubro: true,
+            descripcion: true,
+            direccion: true,
+            telefono: true
+          }
         }
-      ]
+      }
     });
 
     if (!user) {
@@ -194,9 +219,9 @@ const googleAuth = async (req, res) => {
     }
 
     // Buscar usuario existente por googleId o email
-    let user = await Usuario.findOne({ 
-      where: { 
-        [Op.or]: [
+    let user = await prisma.usuario.findFirst({ 
+      where: {
+        OR: [
           { googleId },
           { email }
         ]
@@ -231,32 +256,40 @@ const googleAuth = async (req, res) => {
       
       // Si hay algo que actualizar, lo hacemos en una sola operación
       if (Object.keys(updateData).length > 0) {
-        await user.update(updateData);
+        user = await prisma.usuario.update({
+          where: { id: user.id },
+          data: updateData
+        });
       }
     } else {
       // Nuevo usuario - crear con Google
-      user = await Usuario.create({
-        nombre,
-        email,
-        googleId,
-        rol,
-        password: null, // No tiene contraseña
-        perfilCompleto: false
+      user = await prisma.usuario.create({
+        data: {
+          nombre,
+          email,
+          googleId,
+          rol: rol.toUpperCase(),
+          password: null, // No tiene contraseña
+          perfilCompleto: false
+        }
       });
     }
 
     // Verificar si tiene perfil específico completo
     let perfilEspecifico = null;
-    if (user.rol === 'empresa') {
-      perfilEspecifico = await Empresa.findOne({ where: { usuarioId: user.id } });
-    } else if (user.rol === 'estudiante' || user.rol === 'egresado') {
-      perfilEspecifico = await Estudiante.findOne({ where: { usuarioId: user.id } });
+    if (user.rol === 'EMPRESA') {
+      perfilEspecifico = await prisma.empresa.findUnique({ where: { usuarioId: user.id } });
+    } else if (user.rol === 'ESTUDIANTE' || user.rol === 'EGRESADO') {
+      perfilEspecifico = await prisma.estudiante.findUnique({ where: { usuarioId: user.id } });
     }
 
     // Actualizar perfilCompleto si es necesario
     const tienePerfilCompleto = !!perfilEspecifico;
     if (user.perfilCompleto !== tienePerfilCompleto) {
-      await user.update({ perfilCompleto: tienePerfilCompleto });
+      await prisma.usuario.update({
+        where: { id: user.id },
+        data: { perfilCompleto: tienePerfilCompleto }
+      });
     }
 
     const token = generateToken({ id: user.id, rol: user.rol });
@@ -302,13 +335,13 @@ const completarPerfilEmpresa = async (req, res) => {
     const usuarioId = req.user.id;
 
     // Verificar que sea una empresa
-    const usuario = await Usuario.findByPk(usuarioId);
-    if (!usuario || usuario.rol !== 'empresa') {
+    const usuario = await prisma.usuario.findUnique({ where: { id: usuarioId } });
+    if (!usuario || usuario.rol !== 'EMPRESA') {
       return res.status(403).json({ error: 'Solo empresas pueden completar este perfil' });
     }
 
     // Verificar que no tenga ya un perfil
-    const empresaExistente = await Empresa.findOne({ where: { usuarioId } });
+    const empresaExistente = await prisma.empresa.findUnique({ where: { usuarioId } });
     if (empresaExistente) {
       return res.status(400).json({ error: 'El perfil de empresa ya existe' });
     }
@@ -324,18 +357,23 @@ const completarPerfilEmpresa = async (req, res) => {
     }
 
     // Crear perfil de empresa
-    const empresa = await Empresa.create({
-      usuarioId,
-      ruc,
-      nombreEmpresa: nombre_empresa,
-      rubro,
-      descripcion,
-      direccion,
-      telefono
+    const empresa = await prisma.empresa.create({
+      data: {
+        usuarioId,
+        ruc,
+        nombre_empresa: nombreEmpresaFinal,
+        rubro,
+        descripcion,
+        direccion,
+        telefono
+      }
     });
 
     // Marcar perfil como completo
-    await usuario.update({ perfilCompleto: true });
+    await prisma.usuario.update({
+      where: { id: usuarioId },
+      data: { perfilCompleto: true }
+    });
 
     res.status(201).json({
       mensaje: 'Perfil de empresa completado exitosamente',
@@ -351,31 +389,51 @@ const verificarEstadoPerfil = async (req, res) => {
   try {
     const userId = req.user.id;
     
-    const user = await Usuario.findByPk(userId, {
-      attributes: ['id', 'nombre', 'email', 'rol', 'perfilCompleto'],
-      include: [
-        {
-          model: Estudiante,
-          required: false,
-          attributes: ['id', 'carrera', 'anio_egreso', 'telefono', 'tipo', 'cv', 'foto_perfil']
+    const user = await prisma.usuario.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        nombre: true,
+        email: true,
+        rol: true,
+        perfilCompleto: true,
+        estudiante: {
+          select: {
+            id: true,
+            carrera: true,
+            año_egreso: true,
+            telefono: true,
+            tipo: true,
+            cv: true,
+            foto_perfil: true
+          }
         },
-        {
-          model: Empresa,
-          required: false,
-          attributes: ['id', 'ruc', 'nombreEmpresa', 'rubro', 'descripcion', 'direccion', 'telefono']
+        empresa: {
+          select: {
+            id: true,
+            ruc: true,
+            nombre_empresa: true,
+            rubro: true,
+            descripcion: true,
+            direccion: true,
+            telefono: true
+          }
         }
-      ]
+      }
     });
 
     if (!user) {
       return res.status(404).json({ error: 'Usuario no encontrado' });
     }
 
-    const tienePerfilEspecifico = !!(user.Estudiante || user.Empresa);
+    const tienePerfilEspecifico = !!(user.estudiante || user.empresa);
     
     // Actualizar perfilCompleto si es necesario
     if (user.perfilCompleto !== tienePerfilEspecifico) {
-      await user.update({ perfilCompleto: tienePerfilEspecifico });
+      await prisma.usuario.update({
+        where: { id: userId },
+        data: { perfilCompleto: tienePerfilEspecifico }
+      });
       user.perfilCompleto = tienePerfilEspecifico;
     }
 
@@ -385,7 +443,7 @@ const verificarEstadoPerfil = async (req, res) => {
       perfilCompleto: tienePerfilEspecifico,
       necesitaCompletarPerfil: !tienePerfilEspecifico,
       redirectTo: !tienePerfilEspecifico ? 
-        (user.rol === 'empresa' ? '/auth/completar-perfil-empresa' : '/perfil/completar') : 
+        (user.rol === 'EMPRESA' ? '/auth/completar-perfil-empresa' : '/perfil/completar') : 
         null
     });
   } catch (error) {
@@ -403,34 +461,44 @@ const obtenerUsuariosPublicos = async (req, res) => {
     
     // Construir condiciones de búsqueda
     const whereConditions = {
-      rol: { [Op.ne]: 'admin' } // Excluir administradores
+      rol: { not: 'ADMIN' } // Excluir administradores
     };
     
     // Si hay término de búsqueda, agregar filtro por nombre o email
     if (search && search.trim()) {
-      whereConditions[Op.or] = [
-        { nombre: { [Op.like]: `%${search.trim()}%` } },
-        { email: { [Op.like]: `%${search.trim()}%` } }
+      whereConditions.OR = [
+        { nombre: { contains: search.trim(), mode: 'insensitive' } },
+        { email: { contains: search.trim(), mode: 'insensitive' } }
       ];
     }
     
     // Primero intentamos sin includes para ver si funciona
-    const usuarios = await Usuario.findAndCountAll({
-      where: whereConditions,
-      attributes: ['id', 'nombre', 'email', 'rol', 'perfilCompleto', 'createdAt'],
-      order: [['createdAt', 'DESC']],
-      limit: parseInt(limit),
-      offset: parseInt(offset)
-    });
+    const [usuarios, total] = await Promise.all([
+      prisma.usuario.findMany({
+        where: whereConditions,
+        select: {
+          id: true,
+          nombre: true,
+          email: true,
+          rol: true,
+          perfilCompleto: true,
+          createdAt: true
+        },
+        orderBy: { createdAt: 'desc' },
+        take: parseInt(limit),
+        skip: parseInt(offset)
+      }),
+      prisma.usuario.count({ where: whereConditions })
+    ]);
     
-    console.log(`Encontrados ${usuarios.count} usuarios públicos`);
+    console.log(`Encontrados ${total} usuarios públicos`);
     
     res.json({
-      usuarios: usuarios.rows,
-      total: usuarios.count,
+      usuarios: usuarios,
+      total: total,
       limit: parseInt(limit),
       offset: parseInt(offset),
-      hasMore: (parseInt(offset) + parseInt(limit)) < usuarios.count
+      hasMore: (parseInt(offset) + parseInt(limit)) < total
     });
     
   } catch (error) {
@@ -455,17 +523,23 @@ const buscarUsuarios = async (req, res) => {
     
     console.log(`Buscando usuarios con término: '${search}'`);
     
-    const usuarios = await Usuario.findAll({
+    const usuarios = await prisma.usuario.findMany({
       where: {
-        rol: { [Op.ne]: 'admin' }, // Excluir administradores
-        [Op.or]: [
-          { nombre: { [Op.like]: `%${search.trim()}%` } },
-          { email: { [Op.like]: `%${search.trim()}%` } }
+        rol: { not: 'ADMIN' }, // Excluir administradores
+        OR: [
+          { nombre: { contains: search.trim(), mode: 'insensitive' } },
+          { email: { contains: search.trim(), mode: 'insensitive' } }
         ]
       },
-      attributes: ['id', 'nombre', 'email', 'rol', 'createdAt'],
-      order: [['nombre', 'ASC']],
-      limit: parseInt(limit)
+      select: {
+        id: true,
+        nombre: true,
+        email: true,
+        rol: true,
+        createdAt: true
+      },
+      orderBy: { nombre: 'asc' },
+      take: parseInt(limit)
     });
     
     console.log(`Encontrados ${usuarios.length} usuarios en búsqueda`);

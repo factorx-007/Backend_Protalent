@@ -1,5 +1,4 @@
-const { BlogPost, Categoria, BlogPostMedia, BlogPostReaction, Comentario, sequelize } = require('../models');
-const { Op } = require('sequelize');
+const { prisma } = require('../config/database');
 const { uploadFile, deleteFile } = require('../config/cloudinary');
 
 // Obtener todos los blog posts

@@ -1,15 +1,31 @@
-// src/models/Oferta.js
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/db');
+const { prisma } = require('../config/database');
 
-const Oferta = sequelize.define('Oferta', {
-  titulo: { type: DataTypes.STRING, allowNull: false },
-  descripcion: { type: DataTypes.TEXT },
-  requisitos: { type: DataTypes.TEXT },
-  duracion: { type: DataTypes.STRING },
-  requiereCV: { type: DataTypes.BOOLEAN, defaultValue: true },
-  requiereCarta: { type: DataTypes.BOOLEAN, defaultValue: false },
-  empresaId: { type: DataTypes.INTEGER, allowNull: false }, // FK
-});
+// Controlador básico para ofertas
+const obtenerOfertas = async (req, res) => {
+  try {
+    const ofertas = await prisma.oferta.findMany({ 
+      take: 10,
+      include: {
+        empresa: {
+          select: { nombre_empresa: true }
+        }
+      }
+    });
+    res.json({ ofertas });
+  } catch (error) {
+    res.status(500).json({ error: 'Error interno' });
+  }
+};
 
-module.exports = Oferta;
+const crearOferta = async (req, res) => {
+  try {
+    res.json({ message: 'Función en desarrollo - usar Prisma' });
+  } catch (error) {
+    res.status(500).json({ error: 'Error interno' });
+  }
+};
+
+module.exports = {
+  obtenerOfertas,
+  crearOferta
+};

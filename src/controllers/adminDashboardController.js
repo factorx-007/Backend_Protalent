@@ -1,5 +1,4 @@
-const { Usuario, Empresa, Estudiante, Oferta, Postulacion } = require('../models');
-const { Op } = require('sequelize');
+const { prisma } = require('../config/database');
 
 // Obtener estadísticas del dashboard de admin
 const getDashboardStats = async (req, res) => {
@@ -7,28 +6,36 @@ const getDashboardStats = async (req, res) => {
     console.log('getDashboardStats called - Admin user:', req.adminUser?.nombre);
 
     // Contar totales
-    const totalUsuarios = await Usuario.count();
-    const totalEmpresas = await Empresa.count();
-    const totalOfertas = await Oferta.count();
-    const totalPostulaciones = await Postulacion.count();
+    const [totalUsuarios, totalEmpresas, totalOfertas, totalPostulaciones] = await Promise.all([
+      prisma.usuario.count(),
+      prisma.empresa.count(),
+      prisma.oferta.count(),
+      prisma.postulacion.count()
+    ]);
 
     // Obtener últimos 5 usuarios registrados con información de empresa/estudiante si la tienen
-    const ultimosUsuarios = await Usuario.findAll({
-      limit: 5,
-      order: [['createdAt', 'DESC']],
-      include: [
-        {
-          model: Empresa,
-          required: false,
-          attributes: ['nombreEmpresa', 'descripcion']
+    const ultimosUsuarios = await prisma.usuario.findMany({
+      take: 5,
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        nombre: true,
+        email: true,
+        rol: true,
+        createdAt: true,
+        empresa: {
+          select: {
+            nombre_empresa: true,
+            descripcion: true
+          }
         },
-        {
-          model: Estudiante,
-          required: false,
-          attributes: ['carrera', 'anioIngreso']
+        estudiante: {
+          select: {
+            carrera: true,
+            año_egreso: true
+          }
         }
-      ],
-      attributes: ['id', 'nombre', 'email', 'rol', 'createdAt']
+      }
     });
 
     // Formatear la información de los últimos usuarios
@@ -36,14 +43,14 @@ const getDashboardStats = async (req, res) => {
       let descripcion = '';
       let tipoUsuario = '';
 
-      if (usuario.rol === 'empresa' && usuario.Empresa) {
+      if (usuario.rol === 'EMPRESA' && usuario.empresa) {
         tipoUsuario = 'Empresa';
-        descripcion = `${usuario.nombre} de ${usuario.Empresa.nombreEmpresa} se registró como empresa`;
-      } else if (usuario.rol === 'estudiante' && usuario.Estudiante) {
-        tipoUsuario = 'Estudiante';
-        descripcion = `${usuario.nombre} se registró como estudiante${usuario.Estudiante.carrera ? ` de ${usuario.Estudiante.carrera}` : ''}`;
+        descripcion = `${usuario.nombre} de ${usuario.empresa.nombre_empresa} se registró como empresa`;
+      } else if ((usuario.rol === 'ESTUDIANTE' || usuario.rol === 'EGRESADO') && usuario.estudiante) {
+        tipoUsuario = usuario.rol === 'ESTUDIANTE' ? 'Estudiante' : 'Egresado';
+        descripcion = `${usuario.nombre} se registró como ${tipoUsuario.toLowerCase()}${usuario.estudiante.carrera ? ` de ${usuario.estudiante.carrera}` : ''}`;
       } else {
-        tipoUsuario = usuario.rol === 'empresa' ? 'Empresa' : 'Estudiante';
+        tipoUsuario = usuario.rol === 'EMPRESA' ? 'Empresa' : usuario.rol === 'ESTUDIANTE' ? 'Estudiante' : 'Egresado';
         descripcion = `${usuario.nombre} se registró como ${tipoUsuario.toLowerCase()}`;
       }
       

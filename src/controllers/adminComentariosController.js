@@ -1,62 +1,14 @@
-const { Comentario, BlogPost, Usuario, Estudiante, Empresa, sequelize } = require('../models');
-const { Op } = require('sequelize');
+const adminComentariosService = require('../services/adminComentariosService');
 
 // Obtener todos los comentarios con filtros
 const getComentarios = async (req, res) => {
   try {
-    const { page = 1, limit = 20, blogPostId, buscar } = req.query;
-    const offset = (page - 1) * limit;
-
-    // Construir condiciones de filtro
-    const whereConditions = {};
-    
-    if (blogPostId && blogPostId !== 'all') {
-      whereConditions.blogPostId = blogPostId;
-    }
-    
-    if (buscar) {
-      whereConditions.contenido = { [Op.like]: `%${buscar}%` };
-    }
-
-    const { count, rows: comentarios } = await Comentario.findAndCountAll({
-      where: whereConditions,
-      include: [
-        {
-          model: BlogPost,
-          attributes: ['id', 'titulo'],
-          required: true
-        }
-      ],
-      attributes: ['id', 'contenido', 'autorId', 'autorTipo', 'createdAt'],
-      order: [['createdAt', 'DESC']],
-      limit: parseInt(limit),
-      offset: offset
-    });
+    const result = await adminComentariosService.obtenerComentarios(req.query);
 
     res.json({
       success: true,
-      data: {
-        comentarios: comentarios.map(comentario => ({
-          id: comentario.id,
-          contenido: comentario.contenido,
-          autorId: comentario.autorId,
-          autorTipo: comentario.autorTipo,
-          autor: {
-            nombre: `${comentario.autorTipo || 'Usuario'} ${comentario.autorId || 'Anónimo'}`,
-            tipo: comentario.autorTipo || 'usuario'
-          },
-          blogPost: comentario.BlogPost,
-          createdAt: comentario.createdAt
-        })),
-        pagination: {
-          currentPage: parseInt(page),
-          totalPages: Math.ceil(count / limit),
-          totalItems: count,
-          itemsPerPage: parseInt(limit)
-        }
-      }
+      data: result
     });
-
   } catch (error) {
     console.error('Error al obtener comentarios:', error);
     res.status(500).json({
@@ -70,38 +22,22 @@ const getComentarios = async (req, res) => {
 const getComentarioById = async (req, res) => {
   try {
     const { id } = req.params;
-    
-    const comentario = await Comentario.findByPk(id, {
-      include: [
-        {
-          model: BlogPost,
-          attributes: ['id', 'titulo']
-        }
-      ]
-    });
+    const comentario = await adminComentariosService.obtenerComentarioPorId(id);
 
-    if (!comentario) {
+    res.json({
+      success: true,
+      data: { comentario }
+    });
+  } catch (error) {
+    console.error('Error al obtener comentario:', error);
+    
+    if (error.message === 'Comentario no encontrado') {
       return res.status(404).json({
         success: false,
         error: 'Comentario no encontrado'
       });
     }
 
-    res.json({
-      success: true,
-      data: {
-        comentario: {
-          ...comentario.toJSON(),
-          autor: {
-            nombre: `${comentario.autorTipo || 'Usuario'} ${comentario.autorId || 'Anónimo'}`,
-            tipo: comentario.autorTipo || 'usuario'
-          }
-        }
-      }
-    });
-
-  } catch (error) {
-    console.error('Error al obtener comentario:', error);
     res.status(500).json({
       success: false,
       error: 'Error interno del servidor al obtener comentario'
@@ -113,25 +49,22 @@ const getComentarioById = async (req, res) => {
 const deleteComentario = async (req, res) => {
   try {
     const { id } = req.params;
+    const result = await adminComentariosService.eliminarComentario(id);
 
-    const comentario = await Comentario.findByPk(id);
-
-    if (!comentario) {
+    res.json({
+      success: true,
+      message: result.mensaje
+    });
+  } catch (error) {
+    console.error('Error al eliminar comentario:', error);
+    
+    if (error.message === 'Comentario no encontrado') {
       return res.status(404).json({
         success: false,
         error: 'Comentario no encontrado'
       });
     }
 
-    await comentario.destroy();
-
-    res.json({
-      success: true,
-      message: 'Comentario eliminado exitosamente'
-    });
-
-  } catch (error) {
-    console.error('Error al eliminar comentario:', error);
     res.status(500).json({
       success: false,
       error: 'Error interno del servidor al eliminar comentario'
@@ -139,58 +72,50 @@ const deleteComentario = async (req, res) => {
   }
 };
 
-// Obtener estadísticas de comentarios
-const getComentarioStats = async (req, res) => {
+// Eliminar múltiples comentarios
+const deleteComentariosLote = async (req, res) => {
   try {
-    const totalComentarios = await Comentario.count();
+    const { ids } = req.body;
     
-    const comentariosPorBlogPost = await Comentario.findAll({
-      include: [
-        {
-          model: BlogPost,
-          attributes: ['id', 'titulo']
-        }
-      ],
-      attributes: [
-        'blogPostId',
-        [sequelize.fn('COUNT', sequelize.col('Comentario.id')), 'totalComentarios']
-      ],
-      group: ['blogPostId', 'BlogPost.id'],
-      order: [[sequelize.fn('COUNT', sequelize.col('Comentario.id')), 'DESC']],
-      limit: 10,
-      raw: false
-    });
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Debe proporcionar una lista de IDs válida'
+      });
+    }
 
-    const comentariosRecientes = await Comentario.findAll({
-      include: [
-        {
-          model: BlogPost,
-          attributes: ['id', 'titulo']
-        }
-      ],
-      attributes: ['id', 'contenido', 'autorId', 'autorTipo', 'createdAt'],
-      order: [['createdAt', 'DESC']],
-      limit: 5
-    });
+    const result = await adminComentariosService.eliminarComentariosEnLote(ids);
 
     res.json({
       success: true,
-      data: {
-        totalComentarios,
-        comentariosPorBlogPost: comentariosPorBlogPost.map(item => ({
-          blogPost: item.BlogPost,
-          totalComentarios: item.dataValues.totalComentarios
-        })),
-        comentariosRecientes: comentariosRecientes.map(comentario => ({
-          ...comentario.toJSON(),
-          autor: {
-            nombre: `${comentario.autorTipo || 'Usuario'} ${comentario.autorId || 'Anónimo'}`,
-            tipo: comentario.autorTipo || 'usuario'
-          }
-        }))
-      }
+      message: result.mensaje
     });
+  } catch (error) {
+    console.error('Error al eliminar comentarios en lote:', error);
+    
+    if (error.message.includes('No se encontraron')) {
+      return res.status(404).json({
+        success: false,
+        error: error.message
+      });
+    }
 
+    res.status(500).json({
+      success: false,
+      error: 'Error interno del servidor al eliminar comentarios'
+    });
+  }
+};
+
+// Obtener estadísticas de comentarios
+const getComentarioStats = async (req, res) => {
+  try {
+    const estadisticas = await adminComentariosService.obtenerEstadisticas();
+
+    res.json({
+      success: true,
+      data: estadisticas
+    });
   } catch (error) {
     console.error('Error al obtener estadísticas de comentarios:', error);
     res.status(500).json({
@@ -200,9 +125,75 @@ const getComentarioStats = async (req, res) => {
   }
 };
 
+// Obtener comentarios por blog post
+const getComentariosPorPost = async (req, res) => {
+  try {
+    const { limite } = req.query;
+    const comentarios = await adminComentariosService.obtenerComentariosPorBlogPost(limite);
+
+    res.json({
+      success: true,
+      data: { comentariosPorPost: comentarios }
+    });
+  } catch (error) {
+    console.error('Error al obtener comentarios por post:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error interno del servidor'
+    });
+  }
+};
+
+// Filtrar comentarios ofensivos
+const getComentariosOfensivos = async (req, res) => {
+  try {
+    const comentarios = await adminComentariosService.filtrarComentariosOfensivos();
+
+    res.json({
+      success: true,
+      data: { 
+        comentarios,
+        total: comentarios.length 
+      }
+    });
+  } catch (error) {
+    console.error('Error al filtrar comentarios ofensivos:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error interno del servidor'
+    });
+  }
+};
+
+// Aprobar comentario (placeholder para funcionalidad futura)
+const aprobarComentario = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { aprobado = true } = req.body;
+
+    // Por ahora solo confirmamos la acción
+    // En el futuro se podría agregar un campo 'estado' al schema
+    res.json({
+      success: true,
+      message: `Comentario ${aprobado ? 'aprobado' : 'rechazado'} exitosamente`,
+      data: { id: parseInt(id), aprobado }
+    });
+  } catch (error) {
+    console.error('Error al aprobar comentario:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error interno del servidor al aprobar comentario'
+    });
+  }
+};
+
 module.exports = {
   getComentarios,
   getComentarioById,
   deleteComentario,
-  getComentarioStats
+  deleteComentariosLote,
+  getComentarioStats,
+  getComentariosPorPost,
+  getComentariosOfensivos,
+  aprobarComentario
 };

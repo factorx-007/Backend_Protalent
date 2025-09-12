@@ -1,6 +1,6 @@
 //src/middlewares/verifyToken
 const jwt = require('jsonwebtoken');
-const { Usuario, Estudiante, Empresa } = require('../models');
+const { prisma } = require('../config/database');
 
 const verifyToken = async (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -15,20 +15,37 @@ const verifyToken = async (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
     // Cargar información completa del usuario con sus relaciones
-    const user = await Usuario.findByPk(decoded.id, {
-      attributes: ['id', 'nombre', 'email', 'rol', 'perfilCompleto'],
-      include: [
-        {
-          model: Estudiante,
-          required: false,
-          attributes: ['id', 'carrera', 'anio_egreso', 'telefono', 'tipo', 'cv', 'foto_perfil']
+    const user = await prisma.usuario.findUnique({
+      where: { id: decoded.id },
+      select: {
+        id: true,
+        nombre: true,
+        email: true,
+        rol: true,
+        perfilCompleto: true,
+        estudiante: {
+          select: {
+            id: true,
+            carrera: true,
+            año_egreso: true,
+            telefono: true,
+            tipo: true,
+            cv: true,
+            foto_perfil: true
+          }
         },
-        {
-          model: Empresa,
-          required: false,
-          attributes: ['id', 'ruc', 'nombreEmpresa', 'rubro', 'descripcion', 'direccion', 'telefono']
+        empresa: {
+          select: {
+            id: true,
+            ruc: true,
+            nombre_empresa: true,
+            rubro: true,
+            descripcion: true,
+            direccion: true,
+            telefono: true
+          }
         }
-      ]
+      }
     });
 
     if (!user) {
