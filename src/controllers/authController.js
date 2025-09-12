@@ -9,7 +9,17 @@ const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // Registro
 const register = async (req, res) => {
+  console.log('📝 Datos recibidos en register:', req.body);
+  
   const { nombre, email, password, rol, carrera, tipo, ruc, nombre_empresa, rubro } = req.body;
+
+  // Validaciones básicas
+  if (!nombre || !email || !password || !rol) {
+    return res.status(400).json({ 
+      error: 'Nombre, email, password y rol son obligatorios',
+      received: { nombre: !!nombre, email: !!email, password: !!password, rol: !!rol }
+    });
+  }
 
   try {
     const existe = await prisma.usuario.findUnique({ where: { email } });
