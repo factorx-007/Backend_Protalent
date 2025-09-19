@@ -6,7 +6,7 @@ exports.crearOferta = async (req, res) => {
     console.log('📝 Datos recibidos para crear oferta:', req.body);
     console.log('👤 Usuario autenticado:', req.user);
     
-    const { titulo, descripcion, duracion, requiereCV, requiereCarta, requisitos, preguntas, modalidad, salario, departamento, provincia, distrito } = req.body;
+    const { titulo, descripcion, duracion, estado, modalidad, ubicacion, salario, requiereCV, requiereCarta, requisitos, preguntas, departamento, provincia, distrito } = req.body;
 
     // Validar que el usuario sea una empresa
     if (req.user.rol !== 'EMPRESA') {
@@ -28,17 +28,44 @@ exports.crearOferta = async (req, res) => {
       });
     }
 
-    // Crear la oferta con Prisma
-    const nuevaOferta = await prisma.oferta.create({
-      data: {
-        titulo,
-        descripcion,
-        duracion,
-        requiereCV: requiereCV || true,
-        requiereCarta: requiereCarta || false,
-        empresaId: empresa.id
+    // Preparar datos de ubicación si se proporcionan
+    let ubicacionTexto = null;
+    if (departamento || provincia || distrito) {
+      // Si se envían IDs de ubicación, convertir a texto legible
+      if (departamento && provincia && distrito) {
+        try {
+          const ubicacionInfo = await getUbicacionNombres(departamento, provincia, distrito);
+          ubicacionTexto = `${ubicacionInfo.distrito}, ${ubicacionInfo.provincia}, ${ubicacionInfo.departamento}`;
+        } catch (error) {
+          console.warn('Error al obtener nombres de ubicación:', error);
+          ubicacionTexto = ubicacion; // Usar ubicacion directa si existe
+        }
+      } else {
+        ubicacionTexto = ubicacion; // Usar ubicacion directa si existe
       }
+    }
+
+    // Crear la oferta con Prisma
+    const ofertaData = {
+      titulo,
+      descripcion,
+      duracion,
+      estado: estado?.toUpperCase() || 'PUBLICADA',
+      modalidad: modalidad?.toUpperCase() || 'TIEMPO_COMPLETO',
+      ubicacion: ubicacionTexto,
+      salario,
+      requiereCV: requiereCV ?? true,
+      requiereCarta: requiereCarta ?? false,
+      empresaId: empresa.id
+    };
+    
+    console.log('📋 [crearOferta] Datos finales para crear oferta:', ofertaData);
+    
+    const nuevaOferta = await prisma.oferta.create({
+      data: ofertaData
     });
+    
+    console.log('✅ [crearOferta] Oferta creada exitosamente:', nuevaOferta);
 
     // Crear requisitos si existen
     if (requisitos && Array.isArray(requisitos) && requisitos.length > 0) {
@@ -240,9 +267,70 @@ exports.obtenerOfertaPorId = async (req, res) => {
 exports.obtenerOfertasPorEmpresa = async (req, res) => {
   try {
     const { empresaId } = req.params;
+    const { 
+      page = 1, 
+      limit = 10, 
+      q = '', 
+      estado,
+      modalidad,
+      sortBy = 'createdAt',
+      sortOrder = 'desc'
+    } = req.query;
     
+    console.log('🔍 [obtenerOfertasPorEmpresa] Parámetros recibidos:', {
+      empresaId,
+      page,
+      limit,
+      q,
+      estado,
+      modalidad,
+      sortBy,
+      sortOrder
+    });
+
+    const pageNumber = parseInt(page, 10);
+    const limitNumber = parseInt(limit, 10);
+    const skip = (pageNumber - 1) * limitNumber;
+
+    // Construir el objeto de filtrado
+    const whereClause = {
+      empresaId: parseInt(empresaId)
+    };
+
+    // Aplicar filtros si existen
+    if (estado && estado !== 'todos') {
+      whereClause.estado = estado;
+    }
+
+    if (modalidad && modalidad !== 'todos') {
+      whereClause.modalidad = modalidad;
+    }
+
+    // Búsqueda por texto
+    if (q) {
+      whereClause.OR = [
+        { titulo: { contains: q, mode: 'insensitive' } },
+        { descripcion: { contains: q, mode: 'insensitive' } }
+      ];
+    }
+
+    console.log('🔍 [obtenerOfertasPorEmpresa] WhereClause construido:', whereClause);
+
+    // Obtener el total de ofertas para la paginación
+    const total = await prisma.oferta.count({ where: whereClause });
+    const totalPages = Math.ceil(total / limitNumber);
+
+    console.log('📊 [obtenerOfertasPorEmpresa] Estadísticas de consulta:', {
+      total,
+      totalPages,
+      pageNumber,
+      limitNumber,
+      skip
+    });
+
+    // Obtener las ofertas con paginación y filtros
     const ofertas = await prisma.oferta.findMany({
-      where: { empresaId: parseInt(empresaId) },
+      where: whereClause,
       include: {
         empresa: {
           select: {
@@ -274,23 +362,46 @@ exports.obtenerOfertasPorEmpresa = async (req, res) => {
           orderBy: { orden: 'asc' }
         }
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { [sortBy]: sortOrder },
+      skip,
+      take: limitNumber
+    });
+
+    console.log('📦 [obtenerOfertasPorEmpresa] Ofertas obtenidas de la BD:', {
+      cantidad: ofertas.length,
+      ofertas: ofertas.map(o => ({
+        id: o.id,
+        titulo: o.titulo,
+        estado: o.estado,
+        modalidad: o.modalidad,
+        ubicacion: o.ubicacion,
+        salario: o.salario,
+        duracion: o.duracion,
+        createdAt: o.createdAt
+      }))
     });
 
     // Transformar las ofertas para incluir nombres de ubicación
-    const ofertasConUbicacion = ofertas.map(oferta => {
-      // Obtener nombres de ubicación
-      const ubicacion = getUbicacionNombres(oferta.departamento, oferta.provincia, oferta.distrito);
-      
-      return {
-        ...oferta,
-        ubicacionNombres: ubicacion
-      };
+    const ofertasConUbicacion = ofertas.map(oferta => ({
+      ...oferta,
+      ubicacionNombres: getUbicacionNombres(oferta.departamento, oferta.provincia, oferta.distrito)
+    }));
+
+    console.log('✅ [obtenerOfertasPorEmpresa] Respuesta final enviada:', {
+      success: true,
+      totalOfertas: ofertasConUbicacion.length,
+      total,
+      totalPages,
+      currentPage: pageNumber
     });
 
     res.json({
       success: true,
-      data: ofertasConUbicacion
+      ofertas: ofertasConUbicacion,
+      total,
+      totalPages,
+      currentPage: pageNumber,
+      limit: limitNumber
     });
   } catch (error) {
     console.error('Error al obtener ofertas de la empresa:', error);
@@ -305,7 +416,7 @@ exports.obtenerOfertasPorEmpresa = async (req, res) => {
 exports.actualizarOferta = async (req, res) => {
   try {
     const { id } = req.params;
-    const { titulo, descripcion, duracion, requiereCV, requiereCarta, requisitos, preguntas } = req.body;
+    const { titulo, descripcion, duracion, estado, modalidad, ubicacion, salario, requiereCV, requiereCarta, requisitos, preguntas, departamento, provincia, distrito } = req.body;
 
     // Verificar que la oferta existe
     const ofertaExistente = await prisma.oferta.findUnique({
@@ -319,16 +430,38 @@ exports.actualizarOferta = async (req, res) => {
       });
     }
 
+    // Preparar datos de ubicación si se proporcionan
+    let ubicacionTexto = undefined;
+    if (departamento || provincia || distrito) {
+      if (departamento && provincia && distrito) {
+        try {
+          const ubicacionInfo = await getUbicacionNombres(departamento, provincia, distrito);
+          ubicacionTexto = `${ubicacionInfo.distrito}, ${ubicacionInfo.provincia}, ${ubicacionInfo.departamento}`;
+        } catch (error) {
+          console.warn('Error al obtener nombres de ubicación:', error);
+          ubicacionTexto = ubicacion;
+        }
+      } else {
+        ubicacionTexto = ubicacion;
+      }
+    }
+
+    // Preparar datos de actualización (solo incluir campos que se enviaron)
+    const dataToUpdate = {};
+    if (titulo !== undefined) dataToUpdate.titulo = titulo;
+    if (descripcion !== undefined) dataToUpdate.descripcion = descripcion;
+    if (duracion !== undefined) dataToUpdate.duracion = duracion;
+    if (estado !== undefined) dataToUpdate.estado = estado?.toUpperCase();
+    if (modalidad !== undefined) dataToUpdate.modalidad = modalidad?.toUpperCase();
+    if (ubicacionTexto !== undefined) dataToUpdate.ubicacion = ubicacionTexto;
+    if (salario !== undefined) dataToUpdate.salario = salario;
+    if (requiereCV !== undefined) dataToUpdate.requiereCV = requiereCV;
+    if (requiereCarta !== undefined) dataToUpdate.requiereCarta = requiereCarta;
+
     // Actualizar campos de la oferta
     const ofertaActualizada = await prisma.oferta.update({
       where: { id: parseInt(id) },
-      data: {
-        titulo,
-        descripcion,
-        duracion,
-        requiereCV,
-        requiereCarta
-      }
+      data: dataToUpdate
     });
 
     // Si se envían requisitos, actualizar completamente

@@ -80,6 +80,10 @@ model Oferta {
   titulo        String
   descripcion   String?
   duracion      String?
+  estado        EstadoOferta @default(PUBLICADA)
+  ubicacion     String?
+  modalidad     ModalidadTrabajo @default(TIEMPO_COMPLETO)
+  salario       String?
   requiereCV    Boolean  @default(true)
   requiereCarta Boolean  @default(false)
   empresaId     Int
@@ -334,4 +338,19 @@ enum TipoReaccion {
   WOW     @map("wow")
   SAD     @map("sad")
   ANGRY   @map("angry")
+}
+
+enum EstadoOferta {
+  PUBLICADA @map("publicada")
+  CERRADA   @map("cerrada")
+  BORRADOR  @map("borrador")
+}
+
+enum ModalidadTrabajo {
+  TIEMPO_COMPLETO @map("tiempo_completo")
+  MEDIO_TIEMPO    @map("medio_tiempo")
+  PRACTICA        @map("practica")
+  FREELANCE       @map("freelance")
+  REMOTO          @map("remoto")
+  HIBRIDO         @map("hibrido")
 }
