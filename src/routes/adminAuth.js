@@ -1,7 +1,7 @@
 // src/routes/adminAuth.js
 const express = require('express');
 const bcrypt = require('bcryptjs');
-const { Usuario } = require('../models');
+const { prisma } = require('../config/database');
 const generateToken = require('../utils/generateToken');
 
 const router = express.Router();
@@ -19,8 +19,8 @@ const verifyAdminToken = async (req, res, next) => {
     const jwt = require('jsonwebtoken');
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
-    const user = await Usuario.findByPk(decoded.id);
-    if (!user || user.rol !== 'admin') {
+    const user = await prisma.usuario.findUnique({ where: { id: decoded.id } });
+    if (!user || user.rol !== 'ADMIN') {
       return res.status(403).json({ error: 'Acceso denegado - Solo administradores' });
     }
 
@@ -37,14 +37,13 @@ router.post('/login', async (req, res) => {
 
   try {
     // Buscar usuario con rol admin específicamente
-    const user = await Usuario.findOne({ 
+    const user = await prisma.usuario.findUnique({ 
       where: { 
-        email,
-        rol: 'admin' // Asegurar que solo admins puedan loguearse aquí
+        email
       } 
     });
 
-    if (!user) {
+    if (!user || user.rol !== 'ADMIN') {
       return res.status(404).json({ 
         error: 'Credenciales incorrectas o acceso no autorizado' 
       });

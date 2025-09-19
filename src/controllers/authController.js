@@ -95,22 +95,46 @@ const login = async (req, res) => {
   const { email, password } = req.body;
 
   try {
+    // Validaciones básicas
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email y contraseña son obligatorios' });
+    }
+
     const user = await prisma.usuario.findUnique({ where: { email } });
-    if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+    if (!user) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    // Verificar que el usuario tenga contraseña (no sea usuario de Google sin contraseña)
+    if (!user.password) {
+      return res.status(400).json({ 
+        error: 'Esta cuenta fue creada con Google. Por favor, inicia sesión con Google.' 
+      });
+    }
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(401).json({ error: 'Contraseña incorrecta' });
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Contraseña incorrecta' });
+    }
 
-    // Verificar si tiene perfil específico completo
+    // Para admin, no necesita perfil específico
+    let tienePerfilCompleto = true;
     let perfilEspecifico = null;
-    if (user.rol === 'EMPRESA') {
-      perfilEspecifico = await prisma.empresa.findUnique({ where: { usuarioId: user.id } });
-    } else if (user.rol === 'ESTUDIANTE' || user.rol === 'EGRESADO') {
-      perfilEspecifico = await prisma.estudiante.findUnique({ where: { usuarioId: user.id } });
+
+    if (user.rol === 'ADMIN') {
+      // Los admins siempre tienen perfil completo
+      tienePerfilCompleto = true;
+    } else {
+      // Para otros roles, verificar si tiene perfil específico
+      if (user.rol === 'EMPRESA') {
+        perfilEspecifico = await prisma.empresa.findUnique({ where: { usuarioId: user.id } });
+      } else if (user.rol === 'ESTUDIANTE' || user.rol === 'EGRESADO') {
+        perfilEspecifico = await prisma.estudiante.findUnique({ where: { usuarioId: user.id } });
+      }
+      tienePerfilCompleto = !!perfilEspecifico;
     }
 
     // Actualizar perfilCompleto si es necesario
-    const tienePerfilCompleto = !!perfilEspecifico;
     if (user.perfilCompleto !== tienePerfilCompleto) {
       await prisma.usuario.update({
         where: { id: user.id },
@@ -119,6 +143,25 @@ const login = async (req, res) => {
     }
 
     const token = generateToken({ id: user.id, rol: user.rol });
+
+    // Determinar redirección según el rol
+    let redirectTo = '/dashboard';
+    if (user.rol === 'ADMIN') {
+      redirectTo = '/admin/dashboard';
+    } else if (!tienePerfilCompleto) {
+      if (user.rol === 'EMPRESA') {
+        redirectTo = '/auth/completar-perfil-empresa';
+      } else {
+        redirectTo = '/auth/completar-perfil-estudiante';
+      }
+    } else {
+      // Si el perfil está completo, redirigir según el rol
+      if (user.rol === 'EMPRESA') {
+        redirectTo = '/empresas/dashboard';
+      } else {
+        redirectTo = '/dashboard';
+      }
+    }
 
     res.json({
       mensaje: 'Login exitoso',
@@ -130,8 +173,10 @@ const login = async (req, res) => {
         rol: user.rol,
         perfilCompleto: tienePerfilCompleto,
       },
+      redirectTo
     });
   } catch (err) {
+    console.error('Error en login:', err);
     res.status(500).json({ error: 'Error al iniciar sesión', detalle: err.message });
   }
 };
@@ -217,6 +262,7 @@ const googleAuth = async (req, res) => {
         audience: process.env.GOOGLE_CLIENT_ID,
       });
     } catch (error) {
+      console.error('Error verificando token de Google:', error);
       return res.status(401).json({ error: 'Token de Google inválido' });
     }
 
@@ -226,6 +272,13 @@ const googleAuth = async (req, res) => {
     // Verificar que el email esté verificado por Google
     if (!payload.email_verified) {
       return res.status(400).json({ error: 'Email no verificado por Google' });
+    }
+
+    // Para estudiantes y egresados, verificar que sea email institucional de TECSUP
+    if ((rol === 'estudiante' || rol === 'egresado') && !email.endsWith('@tecsup.edu.pe')) {
+      return res.status(400).json({ 
+        error: 'Los estudiantes y egresados deben usar su correo institucional @tecsup.edu.pe' 
+      });
     }
 
     // Buscar usuario existente por googleId o email
@@ -239,7 +292,7 @@ const googleAuth = async (req, res) => {
     });
 
     if (user) {
-      // Usuario existente
+      // Usuario existente - actualizar información si es necesario
       const updateData = {};
       
       // Vincular cuenta existente con Google si no está vinculada
@@ -252,19 +305,13 @@ const googleAuth = async (req, res) => {
         updateData.nombre = nombre;
       }
       
-      // Actualizar información si es necesario
-      if (user.rol !== rol) {
-        updateData.rol = rol;
-        // Si el rol cambia, marcamos el perfil como incompleto para que complete la información
+      // Si el rol es diferente, actualizar y marcar perfil como incompleto
+      if (user.rol.toLowerCase() !== rol.toLowerCase()) {
+        updateData.rol = rol.toUpperCase();
         updateData.perfilCompleto = false;
       }
       
-      // Asegurarse de que el nombre de la empresa esté en el formato correcto
-      if (rol === 'empresa' && user.nombre) {
-        updateData.nombreEmpresa = user.nombre;
-      }
-      
-      // Si hay algo que actualizar, lo hacemos en una sola operación
+      // Si hay algo que actualizar, lo hacemos
       if (Object.keys(updateData).length > 0) {
         user = await prisma.usuario.update({
           where: { id: user.id },
@@ -279,8 +326,8 @@ const googleAuth = async (req, res) => {
           email,
           googleId,
           rol: rol.toUpperCase(),
-          password: null, // No tiene contraseña
-          perfilCompleto: false
+          password: null, // No tiene contraseña porque usa Google
+          perfilCompleto: false // Siempre false para nuevos usuarios con Google
         }
       });
     }
@@ -293,16 +340,36 @@ const googleAuth = async (req, res) => {
       perfilEspecifico = await prisma.estudiante.findUnique({ where: { usuarioId: user.id } });
     }
 
-    // Actualizar perfilCompleto si es necesario
+    // Actualizar perfilCompleto basado en si tiene perfil específico
     const tienePerfilCompleto = !!perfilEspecifico;
     if (user.perfilCompleto !== tienePerfilCompleto) {
       await prisma.usuario.update({
         where: { id: user.id },
         data: { perfilCompleto: tienePerfilCompleto }
       });
+      user.perfilCompleto = tienePerfilCompleto;
     }
 
     const token = generateToken({ id: user.id, rol: user.rol });
+
+    // Determinar la URL de redirección
+    let redirectTo = '/dashboard';
+    if (!tienePerfilCompleto) {
+      if (user.rol === 'EMPRESA') {
+        redirectTo = '/auth/completar-perfil-empresa';
+      } else {
+        redirectTo = '/perfil/completar';
+      }
+    } else {
+      // Si el perfil está completo, redirigir según el rol
+      if (user.rol === 'ADMIN') {
+        redirectTo = '/admin/dashboard';
+      } else if (user.rol === 'EMPRESA') {
+        redirectTo = '/empresas/dashboard';
+      } else {
+        redirectTo = '/dashboard';
+      }
+    }
 
     res.json({
       mensaje: 'Autenticación con Google exitosa',
@@ -316,9 +383,8 @@ const googleAuth = async (req, res) => {
         picture // URL de la foto de Google
       },
       necesitaCompletarPerfil: !tienePerfilCompleto,
-      redirectTo: !tienePerfilCompleto ? 
-        (user.rol === 'empresa' ? '/auth/completar-perfil-empresa' : '/perfil/completar') : 
-        '/dashboard'
+      redirectTo,
+      esNuevoUsuario: !perfilEspecifico
     });
   } catch (error) {
     console.error('Error en Google Auth:', error);
@@ -394,6 +460,77 @@ const completarPerfilEmpresa = async (req, res) => {
   }
 };
 
+// Completar perfil de estudiante/egresado (después de Google Auth)
+const completarPerfilEstudiante = async (req, res) => {
+  try {
+    const { 
+      carrera, 
+      anio_egreso, 
+      año_egreso,
+      telefono, 
+      ciclo,
+      direccion 
+    } = req.body;
+    
+    const usuarioId = req.user.id;
+    const anioEgresoFinal = anio_egreso || año_egreso;
+
+    // Verificar que sea un estudiante o egresado
+    const usuario = await prisma.usuario.findUnique({ where: { id: usuarioId } });
+    if (!usuario || (usuario.rol !== 'ESTUDIANTE' && usuario.rol !== 'EGRESADO')) {
+      return res.status(403).json({ error: 'Solo estudiantes y egresados pueden completar este perfil' });
+    }
+
+    // Verificar que no tenga ya un perfil
+    const estudianteExistente = await prisma.estudiante.findUnique({ where: { usuarioId } });
+    if (estudianteExistente) {
+      return res.status(400).json({ error: 'El perfil de estudiante ya existe' });
+    }
+
+    // Validaciones
+    if (!carrera) {
+      return res.status(400).json({ error: 'La carrera es obligatoria' });
+    }
+
+    // Para egresados, el año de egreso es obligatorio
+    if (usuario.rol === 'EGRESADO' && !anioEgresoFinal) {
+      return res.status(400).json({ error: 'El año de egreso es obligatorio para egresados' });
+    }
+
+    // Crear perfil de estudiante
+    const estudiante = await prisma.estudiante.create({
+      data: {
+        usuarioId,
+        carrera,
+        año_egreso: anioEgresoFinal ? parseInt(anioEgresoFinal) : null,
+        telefono,
+        tipo: usuario.rol === 'EGRESADO' ? 'EGRESADO' : 'ESTUDIANTE'
+      }
+    });
+
+    // Marcar perfil como completo
+    await prisma.usuario.update({
+      where: { id: usuarioId },
+      data: { perfilCompleto: true }
+    });
+
+    res.status(201).json({
+      mensaje: 'Perfil de estudiante completado exitosamente',
+      estudiante,
+      usuario: {
+        id: usuario.id,
+        nombre: usuario.nombre,
+        email: usuario.email,
+        rol: usuario.rol,
+        perfilCompleto: true
+      }
+    });
+  } catch (error) {
+    console.error('Error al completar perfil de estudiante:', error);
+    res.status(500).json({ error: 'Error al completar perfil de estudiante', detalle: error.message });
+  }
+};
+
 // Verificar estado del perfil del usuario
 const verificarEstadoPerfil = async (req, res) => {
   try {
@@ -436,24 +573,30 @@ const verificarEstadoPerfil = async (req, res) => {
       return res.status(404).json({ error: 'Usuario no encontrado' });
     }
 
-    const tienePerfilEspecifico = !!(user.estudiante || user.empresa);
+    // Para admin, siempre tiene perfil completo
+    let tienePerfilCompleto = true;
+    if (user.rol === 'ADMIN') {
+      tienePerfilCompleto = true;
+    } else {
+      tienePerfilCompleto = !!(user.estudiante || user.empresa);
+    }
     
     // Actualizar perfilCompleto si es necesario
-    if (user.perfilCompleto !== tienePerfilEspecifico) {
+    if (user.perfilCompleto !== tienePerfilCompleto) {
       await prisma.usuario.update({
         where: { id: userId },
-        data: { perfilCompleto: tienePerfilEspecifico }
+        data: { perfilCompleto: tienePerfilCompleto }
       });
-      user.perfilCompleto = tienePerfilEspecifico;
+      user.perfilCompleto = tienePerfilCompleto;
     }
 
     res.json({
       mensaje: 'Estado del perfil del usuario',
       user,
-      perfilCompleto: tienePerfilEspecifico,
-      necesitaCompletarPerfil: !tienePerfilEspecifico,
-      redirectTo: !tienePerfilEspecifico ? 
-        (user.rol === 'EMPRESA' ? '/auth/completar-perfil-empresa' : '/perfil/completar') : 
+      perfilCompleto: tienePerfilCompleto,
+      necesitaCompletarPerfil: !tienePerfilCompleto,
+      redirectTo: !tienePerfilCompleto ? 
+        (user.rol === 'EMPRESA' ? '/auth/completar-perfil-empresa' : '/auth/completar-perfil-estudiante') : 
         null
     });
   } catch (error) {
@@ -576,6 +719,7 @@ module.exports = {
     logout, 
     googleAuth,
     completarPerfilEmpresa,
+    completarPerfilEstudiante,
     verificarEstadoPerfil,
     obtenerUsuariosPublicos,
     buscarUsuarios

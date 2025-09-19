@@ -5,7 +5,8 @@ const {
   register, 
   login, 
   googleAuth, 
-  completarPerfilEmpresa, 
+  completarPerfilEmpresa,
+  completarPerfilEstudiante, 
   verificarEstadoPerfil, 
   perfil, 
   logout,
@@ -18,6 +19,7 @@ router.post('/register', register);
 router.post('/login', login);
 router.post('/google', googleAuth);  // ✅ Google OAuth
 router.post('/completar-perfil-empresa', verifyToken, completarPerfilEmpresa); // ✅ Completar perfil empresa
+router.post('/completar-perfil-estudiante', verifyToken, completarPerfilEstudiante); // ✅ Completar perfil estudiante/egresado
 router.get('/verificar-perfil', verifyToken, verificarEstadoPerfil); // ✅ Verificar estado del perfil
 router.get('/perfil', verifyToken, perfil);   // ✅ protegida
 router.post('/logout', verifyToken, logout);  // ✅ también protegida (opcional)
